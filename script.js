@@ -11,6 +11,7 @@ let cloudData = {
     attendance: [],
     advances: [],
     deductions: [],
+    overtime: [], // جدول جديد لتسجيل الأوفر تايم
     salaries_paid: [],
     expenses: [],
     branch_expense_codes: { 'الدواجن': '1003', 'حدائق حلوان': '1005' },
@@ -24,6 +25,7 @@ database.ref('/').on('value', (snapshot) => {
         cloudData.attendance = data.attendance || [];
         cloudData.advances = data.advances || [];
         cloudData.deductions = data.deductions || [];
+        cloudData.overtime = data.overtime || []; // جلب الأوفر تايم من السحابة
         cloudData.salaries_paid = data.salaries_paid || [];
         cloudData.expenses = data.expenses || [];
         cloudData.official_holidays = data.official_holidays || [];
@@ -218,6 +220,7 @@ function renderAdminDashboard() {
                         <button onclick="adminTab='employees'; render();" class="w-full text-right px-4 py-2.5 rounded-xl font-semibold transition ${adminTab==='employees'?'bg-pink-50 text-pink-600':'text-gray-600 hover:bg-gray-50'}">إضافة موظفة جديدة</button>
                         <button onclick="adminTab='salaries'; render();" class="w-full text-right px-4 py-2.5 rounded-xl font-semibold transition ${adminTab==='salaries'?'bg-pink-50 text-pink-600':'text-gray-600 hover:bg-gray-50'}">إدارة المرتبات الأساسية والمواعيد</button>
                         <button onclick="adminTab='deductions'; render();" class="w-full text-right px-4 py-2.5 rounded-xl font-semibold transition ${adminTab==='deductions'?'bg-pink-50 text-pink-600':'text-gray-600 hover:bg-gray-50'}">إضافة الخصومات</button>
+                        <button onclick="adminTab='overtime'; render();" class="w-full text-right px-4 py-2.5 rounded-xl font-semibold transition ${adminTab==='overtime'?'bg-pink-50 text-pink-600':'text-gray-600 hover:bg-gray-50'}">إضافة وإدارة الأوفر تايم</button>
                         <button onclick="adminTab='advances'; render();" class="w-full text-right px-4 py-2.5 rounded-xl font-semibold transition ${adminTab==='advances'?'bg-pink-50 text-pink-600':'text-gray-600 hover:bg-gray-50'}">إدارة وإضافة السلف (${advances.length})</button>
                         <button onclick="adminTab='inquiry'; render();" class="w-full text-right px-4 py-2.5 rounded-xl font-semibold transition ${adminTab==='inquiry'?'bg-pink-50 text-pink-600':'text-gray-600 hover:bg-gray-50'}">قائمة الاستعلام والرواتب والطباعة</button>
                         <hr class="my-2">
@@ -234,6 +237,7 @@ function renderAdminDashboard() {
                 ${adminTab === 'employees' ? renderAdminEmployeesTab() : ''}
                 ${adminTab === 'salaries' ? renderAdminSalariesTab() : ''}
                 ${adminTab === 'deductions' ? renderAdminDeductionsTab() : ''}
+                ${adminTab === 'overtime' ? renderAdminOvertimeTab() : ''}
                 ${adminTab === 'advances' ? renderAdminAdvancesTab() : ''}
                 ${adminTab === 'inquiry' ? renderAdminInquiryTab() : ''}
                 ${adminTab === 'report_doujan' ? renderUnifiedBranchControlPanel('الدواجن') : ''}
@@ -247,23 +251,39 @@ function renderAdminAnalyticsDashboard() {
     const employees = DB.get('employees');
     const advances = DB.get('advances').filter(a => a.status === 'موافق');
     const deductions = DB.get('deductions');
+    const overtime = DB.get('overtime');
     const expenses = DB.get('expenses');
 
     const totalSalaries = employees.reduce((s, e) => s + e.salary, 0);
     const totalAdvances = advances.reduce((s, a) => s + a.amount, 0);
     const totalDeductions = deductions.reduce((s, d) => s + d.amount, 0);
+    const totalOvertime = overtime.reduce((s, o) => s + o.amount, 0);
     const expDoujan = expenses.filter(x => x.branch === 'الدواجن').reduce((s, x) => s + x.amount, 0);
     const expHadayek = expenses.filter(x => x.branch === 'حدائق حلوان').reduce((s, x) => s + x.amount, 0);
 
     return `
         <div class="space-y-6 max-w-5xl">
             <h3 class="text-2xl font-bold text-gray-800">لوحة المؤشرات والحسابات الشاملة</h3>
-            <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-6 gap-4">
                 <div class="bg-white p-5 rounded-2xl shadow-sm border"><p class="text-gray-400 text-xs">إجمالي المرتبات الأساسية</p><h3 class="text-xl font-bold mt-1 text-pink-600">${totalSalaries} ج.م</h3></div>
                 <div class="bg-white p-5 rounded-2xl shadow-sm border"><p class="text-gray-400 text-xs">إجمالي السلف المعتمدة</p><h3 class="text-xl font-bold mt-1 text-amber-600">${totalAdvances} ج.م</h3></div>
                 <div class="bg-white p-5 rounded-2xl shadow-sm border"><p class="text-gray-400 text-xs">إجمالي الخصومات</p><h3 class="text-xl font-bold mt-1 text-red-600">${totalDeductions} ج.م</h3></div>
-                <div class="bg-white p-5 rounded-2xl shadow-sm border"><p class="text-gray-400 text-xs">مصاريف فرع الدواجن</p><h3 class="text-xl font-bold mt-1 text-blue-600">${expDoujan} ج.م</h3></div>
+                <div class="bg-white p-5 rounded-2xl shadow-sm border"><p class="text-gray-400 text-xs">إجمالي الأوفر تايم</p><h3 class="text-xl font-bold mt-1 text-green-600">${totalOvertime} ج.م</h3></div>
+                <div class="bg-white p-5 rounded-2xl shadow-sm border"><p class="text-gray-400 text-xs">مصاريف الدواجن</p><h3 class="text-xl font-bold mt-1 text-blue-600">${expDoujan} ج.م</h3></div>
                 <div class="bg-white p-5 rounded-2xl shadow-sm border"><p class="text-gray-400 text-xs">مصاريف حدائق حلوان</p><h3 class="text-xl font-bold mt-1 text-purple-600">${expHadayek} ج.م</h3></div>
+            </div>
+
+            <!-- بند الاستعلام السريع بكود الموظف في الصفحة الرئيسية للأدمن -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm border space-y-4">
+                <h4 class="font-bold text-lg text-pink-600">استعلام سريع عن مستحقات موظفة بكود البصمة</h4>
+                <div class="flex gap-2">
+                    <select id="quickInquiryEmpCode" class="flex-1 px-4 py-3 border rounded-xl bg-white text-sm">
+                        <option value="">-- اختر الموظفة أو اكتب الكود --</option>
+                        ${employees.map(e => `<option value="${e.code}">${e.name} (كود: ${e.code} - أساسي: ${e.salary} ج.م)</option>`).join('')}
+                    </select>
+                    <button onclick="runQuickInquiry()" class="bg-pink-600 text-white px-6 py-3 rounded-xl font-semibold text-sm hover:bg-pink-700 transition">استعلام</button>
+                </div>
+                <div id="quickInquiryResult" class="mt-4"></div>
             </div>
 
             <div class="bg-white p-6 rounded-2xl shadow-sm border space-y-4">
@@ -279,6 +299,74 @@ function renderAdminAnalyticsDashboard() {
                         </div>
                     `).join('') || '<p class="text-gray-400 text-sm">لا توجد مصروفات مسجلة حتى الآن</p>'}
                 </div>
+            </div>
+        </div>
+    `;
+}
+
+function runQuickInquiry() {
+    const selectEl = document.getElementById('quickInquiryEmpCode');
+    const resultDiv = document.getElementById('quickInquiryResult');
+    if (!selectEl || !resultDiv) return;
+
+    const code = selectEl.value.trim();
+    if (!code) {
+        resultDiv.innerHTML = '<p class="text-red-500 text-sm">الرجاء اختيار الموظفة أولاً!</p>';
+        return;
+    }
+
+    const employees = DB.get('employees');
+    const emp = employees.find(e => e.code === code);
+    if (!emp) {
+        resultDiv.innerHTML = '<p class="text-red-500 text-sm">لم يتم العثور على موظفة بهذا الكود.</p>';
+        return;
+    }
+
+    // حساب أيام الحضور الفريدة المسجلة
+    const attendance = DB.get('attendance').filter(a => a.code === emp.code);
+    const uniqueDaysPresent = [...new Set(attendance.map(a => a.date))].length;
+
+    // حساب قيمة اليوم (المرتب الأساسي ÷ 30)
+    const salary = emp.salary || 0;
+    const dayRate = Math.round((salary / 30) * 100) / 100;
+
+    // القبض بناءً على الحضور (عدد أيام الحضور × قيمة اليوم)
+    const earnedByAttendance = Math.round(uniqueDaysPresent * dayRate * 100) / 100;
+
+    // إجمالي السلف المعتمدة لهذه الموظفة
+    const advances = DB.get('advances').filter(a => a.code === emp.code && a.status === 'موافق');
+    const totalAdvances = advances.reduce((s, a) => s + a.amount, 0);
+
+    // الصافي النهائي بعد خصم السلف من القبض حسب الحضور
+    const netAfterAdvances = Math.round((earnedByAttendance - totalAdvances) * 100) / 100;
+
+    resultDiv.innerHTML = `
+        <div class="bg-pink-50 border border-pink-200 p-5 rounded-2xl space-y-3 text-sm">
+            <div class="flex justify-between items-center border-b pb-2">
+                <span class="font-bold text-gray-800">اسم الموظفة: <span class="text-pink-600">${emp.name}</span></span>
+                <span class="text-gray-500 text-xs">المرتب الشامل بالشهر: <strong>${salary} ج.م</strong></span>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
+                <div class="bg-white p-3 rounded-xl border">
+                    <span class="text-gray-400 text-xs block">عدد أيام الحضور</span>
+                    <strong class="text-blue-600 text-lg">${uniqueDaysPresent} يوم</strong>
+                </div>
+                <div class="bg-white p-3 rounded-xl border">
+                    <span class="text-gray-400 text-xs block">قيمة اليوم الواحد</span>
+                    <strong class="text-gray-700 text-lg">${dayRate} ج.م</strong>
+                </div>
+                <div class="bg-white p-3 rounded-xl border">
+                    <span class="text-gray-400 text-xs block">القبض حسب الحضور</span>
+                    <strong class="text-green-600 text-lg">${earnedByAttendance} ج.م</strong>
+                </div>
+                <div class="bg-white p-3 rounded-xl border">
+                    <span class="text-gray-400 text-xs block">السلف المسحوبة</span>
+                    <strong class="text-red-600 text-lg">-${totalAdvances} ج.م</strong>
+                </div>
+            </div>
+            <div class="bg-white p-3 rounded-xl border flex justify-between items-center">
+                <span class="font-bold text-gray-700">المستحق النهائي بعد خصم السلف (حسب الحضور الفعلي):</span>
+                <strong class="text-pink-600 text-xl">${netAfterAdvances} ج.م</strong>
             </div>
         </div>
     `;
@@ -490,7 +578,7 @@ function updateEmployeeFull(id) {
 function renderAdminDeductionsTab() {
     const employees = DB.get('employees');
     const deductions = DB.get('deductions');
-    const manualDeductions = deductions.filter(d => !d.isSystem); // فلترة الخصومات اليدوية فقط
+    const manualDeductions = deductions.filter(d => !d.isSystem);
     return `
         <div class="space-y-6 max-w-3xl">
             <h3 class="text-xl font-bold">إضافة خصم يدوي (مستقل عن التأخيرات)</h3>
@@ -532,6 +620,67 @@ function saveDeduction() {
     DB.set('deductions', deductions);
     alert('تم تسجيل الخصم اليدوي بنجاح.');
     amountEl.value = ''; reasonEl.value = '';
+}
+
+// --- تبويب إدارة وإضافة الأوفر تايم ---
+function renderAdminOvertimeTab() {
+    const employees = DB.get('employees');
+    const overtimeList = DB.get('overtime');
+    return `
+        <div class="space-y-6 max-w-3xl">
+            <h3 class="text-xl font-bold">إضافة وتعديل ساعات الأوفر تايم (الوقت الإضافي)</h3>
+            <div class="bg-white p-6 rounded-2xl shadow-sm border space-y-4">
+                <select id="ovEmpCode" class="w-full px-4 py-2.5 border rounded-xl bg-white">
+                    ${employees.map(e => `<option value="${e.code}">${e.name} (${e.branch} - ${e.code})</option>`).join('')}
+                </select>
+                <input type="number" id="ovHours" placeholder="عدد ساعات الأوفر تايم (مثال: 2)" class="w-full px-4 py-2.5 border rounded-xl">
+                <input type="number" id="ovAmount" placeholder="أو اكتب المبلغ المالي مباشرة (اختياري، أو اتركه ليحسب تلقائياً)" class="w-full px-4 py-2.5 border rounded-xl">
+                <input type="text" id="ovReason" placeholder="سبب الأوفر تايم (مثال: شغل إضافي بعد الوردية، موسم زحمة...)" class="w-full px-4 py-2.5 border rounded-xl">
+                <button onclick="saveOvertime()" class="bg-pink-600 text-white px-6 py-2.5 rounded-xl font-semibold">تسجيل الأوفر تايم وتسميعه في حساب الموظفة</button>
+            </div>
+
+            <h4 class="text-lg font-bold mt-6">سجل الأوفر تايم المسجل</h4>
+            <div class="bg-white rounded-2xl shadow-sm border p-4 space-y-2">
+                ${overtimeList.map(o => `
+                    <div class="flex justify-between items-center p-3 bg-gray-50 rounded-xl text-sm">
+                        <span>كود: <strong>${o.code}</strong> | مبلغ: <strong class="text-green-600">+${o.amount} ج.م</strong> (${o.hours ? o.hours + ' ساعات' : ''} - السبب: ${o.reason}) <span class="text-xs text-gray-400">[${o.date}]</span></span>
+                        <button onclick="deleteRecord('overtime', ${o.id})" class="text-red-500 text-xs hover:underline">حذف</button>
+                    </div>
+                `).join('') || '<p class="text-gray-400 text-sm">لا توجد سجلات أوفر تايم مسجلة</p>'}
+            </div>
+        </div>
+    `;
+}
+
+function saveOvertime() {
+    const codeEl = document.getElementById('ovEmpCode');
+    const hoursEl = document.getElementById('ovHours');
+    const amountEl = document.getElementById('ovAmount');
+    const reasonEl = document.getElementById('ovReason');
+    if (!codeEl || !hoursEl || !amountEl || !reasonEl) return;
+
+    const code = codeEl.value;
+    const hours = parseFloat(hoursEl.value) || 0;
+    let amount = parseFloat(amountEl.value);
+    const reason = reasonEl.value.trim();
+
+    const employees = DB.get('employees');
+    const emp = employees.find(e => e.code === code);
+    if (!emp) return alert('الموظفة غير موجودة.');
+
+    if (!amount || isNaN(amount)) {
+        if (hours <= 0) return alert('الرجاء إدخال عدد ساعات الأوفر تايم أو المبلغ المالي بشكل صحيح.');
+        const minuteRate = calculateDynamicMinuteRate(emp);
+        amount = Math.round(hours * 60 * minuteRate * 100) / 100;
+    }
+
+    if (!reason) return alert('الرجاء كتابة سبب الأوفر تايم.');
+
+    const overtimeList = DB.get('overtime');
+    overtimeList.push({ id: Date.now(), code, hours, amount, reason, date: new Date().toLocaleDateString('ar-EG') });
+    DB.set('overtime', overtimeList);
+    alert('تم تسجيل الأوفر تايم وتسميعه في حساب الموظفة بنجاح.');
+    hoursEl.value = ''; amountEl.value = ''; reasonEl.value = '';
 }
 
 function renderAdminAdvancesTab() {
@@ -613,6 +762,7 @@ function renderAdminInquiryTab() {
     const employees = DB.get('employees');
     const deductions = DB.get('deductions');
     const advances = DB.get('advances');
+    const overtimeList = DB.get('overtime');
     const salariesPaid = DB.get('salaries_paid');
 
     return `
@@ -622,7 +772,8 @@ function renderAdminInquiryTab() {
                 ${employees.map(e => {
                     const empDed = deductions.filter(d => d.code === e.code).reduce((s, d) => s + d.amount, 0);
                     const empAdv = advances.filter(a => a.code === e.code && a.status === 'موافق').reduce((s, a) => s + a.amount, 0);
-                    const net = e.salary - empDed - empAdv;
+                    const empOv = overtimeList.filter(o => o.code === e.code).reduce((s, o) => s + o.amount, 0);
+                    const net = e.salary - empDed - empAdv + empOv;
                     const cycleName = e.payCycle === 'weekly' ? 'أسبوعي' : e.payCycle === 'biweekly' ? 'كل 15 يوم' : 'شهري';
                     const empPaidNotices = salariesPaid.filter(p => p.code === e.code);
 
@@ -631,7 +782,7 @@ function renderAdminInquiryTab() {
                             <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                                 <div>
                                     <h4 class="font-bold text-lg text-pink-600">${e.name} <span class="text-xs text-gray-500">(${e.branch} - كود: ${e.code})</span></h4>
-                                    <p class="text-xs text-gray-500 mt-1">نظام القبض: <span class="font-bold text-gray-700">${cycleName}</span> | الأساسي: ${e.salary} | الخصومات: -${empDed} | السلف: -${empAdv} | <strong>الصافي: ${net} ج.م</strong></p>
+                                    <p class="text-xs text-gray-500 mt-1">نظام القبض: <span class="font-bold text-gray-700">${cycleName}</span> | الأساسي: ${e.salary} | الخصومات: -${empDed} | السلف: -${empAdv} | أوفر تايم: <span class="text-green-600 font-bold">+${empOv}</span> | <strong>الصافي: ${net} ج.م</strong></p>
                                 </div>
                                 <div class="flex items-center gap-2 flex-wrap">
                                     <button onclick="markAsPaidCycle('${e.code}', '${e.name}', '${e.payCycle || 'biweekly'}')" class="bg-green-600 text-white px-4 py-2 rounded-xl text-xs font-semibold hover:bg-green-700 transition">تأكيد القبض (متكرر)</button>
@@ -689,7 +840,10 @@ function prepareInvoiceHTML(code) {
     const totalDed = deductions.reduce((s, d) => s + d.amount, 0);
     const advances = DB.get('advances').filter(a => a.code === code && a.status === 'موافق');
     const totalAdv = advances.reduce((s, a) => s + a.amount, 0);
-    const net = e.salary - totalDed - totalAdv;
+    const overtimeList = DB.get('overtime').filter(o => o.code === code);
+    const totalOv = overtimeList.reduce((s, o) => s + o.amount, 0);
+
+    const net = e.salary - totalDed - totalAdv + totalOv;
     const cycleName = e.payCycle === 'weekly' ? 'أسبوعي' : e.payCycle === 'biweekly' ? 'كل 15 يوم' : 'شهري';
 
     return `
@@ -714,6 +868,13 @@ function prepareInvoiceHTML(code) {
                         ${manualDeductions.length ? `<ul style="margin:5px 0 0 15px; padding:0; font-size:12px; color:#555;">${manualDeductions.map(d=>`<li>${d.reason}: -${d.amount} ج.م</li>`).join('')}</ul>` : '<span style="color:#888; font-size:12px;"> (لا توجد)</span>'}
                     </td>
                     <td style="text-align: left; color: #dc2626; vertical-align: top;">-${manualDeductions.reduce((s,d)=>s+d.amount,0)} ج.م</td>
+                </tr>
+                <tr>
+                    <td>
+                        مستحقات الأوفر تايم (الوقت الإضافي):
+                        ${overtimeList.length ? `<ul style="margin:5px 0 0 15px; padding:0; font-size:12px; color:#555;">${overtimeList.map(o=>`<li>${o.reason}: +${o.amount} ج.م</li>`).join('')}</ul>` : '<span style="color:#888; font-size:12px;"> (لا توجد)</span>'}
+                    </td>
+                    <td style="text-align: left; color: #16a34a; vertical-align: top;">+${totalOv} ج.م</td>
                 </tr>
                 <tr><td>إجمالي السلف المعتمدة</td><td style="text-align: left; color: #dc2626;">-${totalAdv} ج.م</td></tr>
                 <tr style="background: #fdf2f8; font-weight: bold;"><td>صافي المستحق النهائي</td><td style="text-align: left; color: #db2777; font-size: 16px;">${net} ج.م</td></tr>
@@ -878,7 +1039,7 @@ function clearTodayAttendance(branchName) {
     const today = new Date().toLocaleDateString('ar-EG');
     let attendance = DB.get('attendance').filter(a => !(a.branch === branchName && a.date === today));
     DB.set('attendance', attendance);
-    let deductions = DB.get('deductions').filter(d => !d.isSystem); // الاحتفاظ بالخصومات اليدوية ومسح خصومات النظام فقط
+    let deductions = DB.get('deductions').filter(d => !d.isSystem); 
     DB.set('deductions', deductions);
     alert('تم تصفير السجل وخصومات التأخير والانصراف المبكر بنجاح.');
 }
@@ -902,13 +1063,14 @@ function renderEmployeePortal() {
     const advances = DB.get('advances').filter(a => a.code === emp.code);
     const deductions = DB.get('deductions').filter(d => d.code === emp.code);
     const manualDeductions = deductions.filter(d => !d.isSystem);
-    const systemDeductions = deductions.filter(d => d.isSystem);
+    const overtimeList = DB.get('overtime').filter(o => o.code === emp.code);
     
     const paidList = DB.get('salaries_paid').filter(p => p.code === emp.code);
 
     const totalDed = deductions.reduce((sum, d) => sum + d.amount, 0);
     const totalAdv = advances.filter(a => a.status === 'موافق').reduce((sum, a) => sum + a.amount, 0);
-    const net = emp.salary - totalDed - totalAdv;
+    const totalOv = overtimeList.reduce((sum, o) => sum + o.amount, 0);
+    const net = emp.salary - totalDed - totalAdv + totalOv;
 
     return `
         <header class="bg-white shadow-sm px-6 py-4 flex justify-between items-center">
@@ -945,7 +1107,22 @@ function renderEmployeePortal() {
                 </div>
             ` : ''}
 
-            <!-- عرض الخصومات اليدوية الإضافية بشكل منفصل وواضح للموظفة -->
+            <!-- عرض الأوفر تايم بوضوح للموظفة -->
+            ${overtimeList.length ? `
+                <div class="bg-green-50 border border-green-200 p-5 rounded-3xl space-y-2">
+                    <h4 class="font-bold text-green-700 text-sm">🌟 تمت إضافة مستحقات أوفر تايم (وقت إضافي) لحسابك:</h4>
+                    <div class="space-y-1.5">
+                        ${overtimeList.map(o => `
+                            <div class="bg-white p-3 rounded-xl border border-green-100 flex justify-between items-center text-xs">
+                                <span class="text-gray-800">السبب: <strong>${o.reason}</strong> ${o.hours ? `(${o.hours} ساعات)` : ''} <span class="text-gray-400">(${o.date})</span></span>
+                                <span class="font-bold text-green-600">+${o.amount} ج.م</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            ` : ''}
+
+            <!-- عرض الخصومات اليدوية الإضافية -->
             ${manualDeductions.length ? `
                 <div class="bg-red-50 border border-red-200 p-5 rounded-3xl space-y-2">
                     <h4 class="font-bold text-red-700 text-sm">⚠️ تم تسجيل خصومات إضافية على حسابك:</h4>
@@ -972,7 +1149,7 @@ function renderEmployeePortal() {
             <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div class="bg-white p-5 rounded-2xl shadow-sm border"><p class="text-gray-400 text-sm">أيام الحضور</p><h3 class="text-2xl font-bold mt-1 text-blue-600">${uniqueDaysPresent} يوم</h3></div>
                 <div class="bg-white p-5 rounded-2xl shadow-sm border"><p class="text-gray-400 text-sm">إجمالي التأخيرات</p><h3 class="text-2xl font-bold mt-1 text-red-600">${totalDelayMin} دقيقة</h3></div>
-                <div class="bg-white p-5 rounded-2xl shadow-sm border"><p class="text-gray-400 text-sm">السلف المعتمدة</p><h3 class="text-2xl font-bold mt-1 text-amber-600">${totalAdv} ج.م</h3></div>
+                <div class="bg-white p-5 rounded-2xl shadow-sm border"><p class="text-gray-400 text-sm">أوفر تايم مضاف</p><h3 class="text-2xl font-bold mt-1 text-green-600">+${totalOv} ج.م</h3></div>
                 <div class="bg-white p-5 rounded-2xl shadow-sm border"><p class="text-gray-400 text-sm">إجمالي الخصومات</p><h3 class="text-2xl font-bold mt-1 text-red-600">-${totalDed} ج.م</h3></div>
             </div>
 
