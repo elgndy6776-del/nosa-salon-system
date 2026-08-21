@@ -191,8 +191,11 @@ function saveBranchExpense() {
 
     const branch = branchEl.value;
     const enteredCode = codeEl.value.trim();
-    const branchCodes = cloudData.branch_expense_codes || {};
-    const correctCode = branchCodes[branch] || '';
+    
+    // الأكواد الافتراضية المضمونة تماماً على الموبايل واللاب
+    const defaultCodes = { 'الدواجن': '1003', 'حدائق حلوان': '1005' };
+    const branchCodes = (cloudData && cloudData.branch_expense_codes) ? cloudData.branch_expense_codes : defaultCodes;
+    const correctCode = branchCodes[branch] || defaultCodes[branch];
 
     if (enteredCode !== correctCode) {
         return alert('كود المصروف غير صحيح لهذا الفرع! تأكد من الكود المخصص لفرعك.');
