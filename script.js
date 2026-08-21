@@ -1,31 +1,62 @@
-// --- Database Setup (LocalStorage for permanent data) ---
-const DB = {
-    get(key) { return JSON.parse(localStorage.getItem('nosa_' + key)) || []; },
-    set(key, data) { 
-        localStorage.setItem('nosa_' + key, JSON.stringify(data)); 
-        render(); 
-    }
+// --- إعدادات الاتصال بـ Firebase Realtime Database ---
+const firebaseConfig = {
+    databaseURL: "https://nosa-salon-db-default-rtdb.europe-west1.firebasedatabase.app/"
 };
 
-if (!DB.get('employees').length) {
-    localStorage.setItem('nosa_employees', JSON.stringify([
+// تهيئة تطبيق فايربيس
+firebase.initializeApp(firebaseConfig);
+const database = firebase.database();
+
+// تخزين مؤقت محلي لتحديث واجهة المستخدم بسرعة فائقة
+let cloudData = {
+    employees: [],
+    attendance: [],
+    advances: [],
+    deductions: [],
+    salaries_paid: [],
+    expenses: [],
+    branch_expense_codes: { 'الدواجن': '1003', 'حدائق حلوان': '1005' }
+};
+
+// الاستماع للتغييرات لحظياً من السحابة (Real-time Listener)
+database.ref('/').on('value', (snapshot) => {
+    const data = snapshot.val();
+    if (data) {
+        cloudData.employees = data.employees || [];
+        cloudData.attendance = data.attendance || [];
+        cloudData.advances = data.advances || [];
+        cloudData.deductions = data.deductions || [];
+        cloudData.salaries_paid = data.salaries_paid || [];
+        cloudData.expenses = data.expenses || [];
+        if (data.branch_expense_codes) {
+            cloudData.branch_expense_codes = data.branch_expense_codes;
+        }
+    } else {
+        initializeDefaultData();
+    }
+    render(); 
+});
+
+function initializeDefaultData() {
+    const defaultEmp = [
         { id: 1, code: '101', name: 'سارة محمد', branch: 'الدواجن', salary: 5000, active: true },
         { id: 2, code: '102', name: 'مريم أحمد', branch: 'حدائق حلوان', salary: 5500, active: true }
-    ]));
+    ];
+    database.ref('employees').set(defaultEmp);
+    database.ref('branch_expense_codes').set({ 'الدواجن': '1003', 'حدائق حلوان': '1005' });
 }
 
-if (!localStorage.getItem('nosa_branch_expense_codes')) {
-    localStorage.setItem('nosa_branch_expense_codes', JSON.stringify({
-        'الدواجن': '1003',
-        'حدائق حلوان': '1005'
-    }));
-}
-
-if (!localStorage.getItem('nosa_attendance')) localStorage.setItem('nosa_attendance', JSON.stringify([]));
-if (!localStorage.getItem('nosa_advances')) localStorage.setItem('nosa_advances', JSON.stringify([]));
-if (!localStorage.getItem('nosa_deductions')) localStorage.setItem('nosa_deductions', JSON.stringify([]));
-if (!localStorage.getItem('nosa_salaries_paid')) localStorage.setItem('nosa_salaries_paid', JSON.stringify([]));
-if (!localStorage.getItem('nosa_expenses')) localStorage.setItem('nosa_expenses', JSON.stringify([]));
+// كائن الـ DB للتعامل المباشر مع السحابة
+const DB = {
+    get(key) { 
+        return cloudData[key] || []; 
+    },
+    set(key, data) { 
+        database.ref(key).set(data).catch((error) => {
+            alert('خطأ في حفظ البيانات على السحابة: ' + error.message);
+        });
+    }
+};
 
 // --- Session State ---
 let currentView = sessionStorage.getItem('nosa_currentView') || 'login_portal';
@@ -34,14 +65,17 @@ let activeEmployee = JSON.parse(sessionStorage.getItem('nosa_activeEmployee')) |
 let selectedBranch = 'الدواجن'; 
 
 function saveSession() {
-    sessionStorage.setItem('nosa_currentView', currentView);
-    sessionStorage.setItem('nosa_adminTab', adminTab);
-    sessionStorage.setItem('nosa_activeEmployee', JSON.stringify(activeEmployee));
+    try {
+        sessionStorage.setItem('nosa_currentView', currentView);
+        sessionStorage.setItem('nosa_adminTab', adminTab);
+        sessionStorage.setItem('nosa_activeEmployee', JSON.stringify(activeEmployee));
+    } catch (e) {}
 }
 
 function render() {
     saveSession();
     const app = document.getElementById('app');
+    if (!app) return;
     app.innerHTML = '';
 
     if (currentView === 'login_portal') {
@@ -62,12 +96,6 @@ function render() {
         render();
     }
 }
-
-window.addEventListener('storage', (e) => {
-    if (e.key && e.key.startsWith('nosa_')) {
-        render();
-    }
-});
 
 // --- 1. Login Portal ---
 function renderLoginPortal() {
@@ -94,7 +122,9 @@ function renderLoginPortal() {
 }
 
 function handleUniversalLogin() {
-    const val = document.getElementById('universalInput').value.trim();
+    const inputEl = document.getElementById('universalInput');
+    if (!inputEl) return;
+    const val = inputEl.value.trim();
     if (!val) return alert('الرجاء إدخال الكود أو كلمة المرور!');
 
     if (val === 'NOSA406050') {
@@ -152,17 +182,24 @@ function renderBranchExpensesPortal() {
 }
 
 function saveBranchExpense() {
-    const branch = document.getElementById('expBranchSelect').value;
-    const enteredCode = document.getElementById('expCodeInput').value.trim();
-    const branchCodes = JSON.parse(localStorage.getItem('nosa_branch_expense_codes')) || {};
+    const branchEl = document.getElementById('expBranchSelect');
+    const codeEl = document.getElementById('expCodeInput');
+    const reasonEl = document.getElementById('expReason');
+    const amountEl = document.getElementById('expAmount');
+
+    if (!branchEl || !codeEl || !reasonEl || !amountEl) return;
+
+    const branch = branchEl.value;
+    const enteredCode = codeEl.value.trim();
+    const branchCodes = cloudData.branch_expense_codes || {};
     const correctCode = branchCodes[branch] || '';
 
     if (enteredCode !== correctCode) {
         return alert('كود المصروف غير صحيح لهذا الفرع! تأكد من الكود المخصص لفرعك.');
     }
 
-    const reason = document.getElementById('expReason').value.trim();
-    const amount = parseFloat(document.getElementById('expAmount').value);
+    const reason = reasonEl.value.trim();
+    const amount = parseFloat(amountEl.value);
 
     if (!reason || !amount || isNaN(amount)) {
         return alert('الرجاء إدخال اسم الخدمة والمبلغ بشكل صحيح.');
@@ -179,14 +216,13 @@ function saveBranchExpense() {
     });
     DB.set('expenses', expenses);
     alert('تم تسجيل مصروف الفرع بنجاح ووصل للإدارة فوراً.');
-    document.getElementById('expReason').value = '';
-    document.getElementById('expAmount').value = '';
-    document.getElementById('expCodeInput').value = '';
+    reasonEl.value = '';
+    amountEl.value = '';
+    codeEl.value = '';
 }
 
 // --- 3. Admin Dashboard ---
 function renderAdminDashboard() {
-    const employees = DB.get('employees');
     const advances = DB.get('advances');
 
     return `
@@ -255,7 +291,7 @@ function renderAdminAnalyticsDashboard() {
 }
 
 function renderBranchCodesConfigTab() {
-    const branchCodes = JSON.parse(localStorage.getItem('nosa_branch_expense_codes')) || {};
+    const branchCodes = cloudData.branch_expense_codes || {};
     return `
         <div class="space-y-6 max-w-3xl">
             <h3 class="text-xl font-bold">تعديل وتخصيص كود المصاريف لكل فرع</h3>
@@ -275,15 +311,20 @@ function renderBranchCodesConfigTab() {
 }
 
 function saveBranchCodesConfig() {
-    const codeDoujan = document.getElementById('codeDoujan').value.trim();
-    const codeHadayek = document.getElementById('codeHadayek').value.trim();
+    const dEl = document.getElementById('codeDoujan');
+    const hEl = document.getElementById('codeHadayek');
+    if (!dEl || !hEl) return;
+    const codeDoujan = dEl.value.trim();
+    const codeHadayek = hEl.value.trim();
     if (!codeDoujan || !codeHadayek) return alert('الرجاء إدخال الأكواد للفرعين.');
 
-    localStorage.setItem('nosa_branch_expense_codes', JSON.stringify({
+    const newCodes = {
         'الدواجن': codeDoujan,
         'حدائق حلوان': codeHadayek
-    }));
-    alert('تم تحديث أكواد مصاريف الفروع بنجاح.');
+    };
+    database.ref('branch_expense_codes').set(newCodes).then(() => {
+        alert('تم تحديث أكواد مصاريف الفروع بنجاح.');
+    });
 }
 
 function renderAdminEmployeesTab() {
@@ -321,10 +362,16 @@ function renderAdminEmployeesTab() {
 }
 
 function saveNewEmployee() {
-    const name = document.getElementById('empName').value;
-    const code = document.getElementById('empCode').value;
-    const branch = document.getElementById('empBranch').value;
-    const salary = parseFloat(document.getElementById('empSalary').value);
+    const nameEl = document.getElementById('empName');
+    const codeEl = document.getElementById('empCode');
+    const branchEl = document.getElementById('empBranch');
+    const salaryEl = document.getElementById('empSalary');
+
+    if (!nameEl || !codeEl || !branchEl || !salaryEl) return;
+    const name = nameEl.value;
+    const code = codeEl.value;
+    const branch = branchEl.value;
+    const salary = parseFloat(salaryEl.value);
     if (!name || !code || !salary) return alert('الرجاء إكمال البيانات');
     const employees = DB.get('employees');
     employees.push({ id: Date.now(), name, code, branch, salary, active: true });
@@ -356,7 +403,9 @@ function renderAdminSalariesTab() {
 }
 
 function updateSalary(id) {
-    const newSal = parseFloat(document.getElementById(`sal_${id}`).value);
+    const inputField = document.getElementById(`sal_${id}`);
+    if (!inputField) return;
+    const newSal = parseFloat(inputField.value);
     let employees = DB.get('employees');
     employees = employees.map(e => e.id === id ? { ...e, salary: newSal } : e);
     DB.set('employees', employees);
@@ -392,9 +441,14 @@ function renderAdminDeductionsTab() {
 }
 
 function saveDeduction() {
-    const code = document.getElementById('dedEmpCode').value;
-    const amount = parseFloat(document.getElementById('dedAmount').value);
-    const reason = document.getElementById('dedReason').value;
+    const codeEl = document.getElementById('dedEmpCode');
+    const amountEl = document.getElementById('dedAmount');
+    const reasonEl = document.getElementById('dedReason');
+    if (!codeEl || !amountEl || !reasonEl) return;
+
+    const code = codeEl.value;
+    const amount = parseFloat(amountEl.value);
+    const reason = reasonEl.value;
     if (!amount || !reason) return alert('أدخل المبلغ والسبب');
     const deductions = DB.get('deductions');
     deductions.push({ id: Date.now(), code, amount, reason, date: new Date().toLocaleDateString('ar-EG') });
@@ -486,6 +540,7 @@ function markAsPaid(code, name) {
 function prepareInvoiceHTML(code) {
     const employees = DB.get('employees');
     const e = employees.find(x => x.code === code);
+    if (!e) return '';
     const deductions = DB.get('deductions').filter(d => d.code === code);
     const advances = DB.get('advances').filter(a => a.code === code && a.status === 'موافق');
 
@@ -523,9 +578,11 @@ function prepareInvoiceHTML(code) {
 
 function printInvoice(code) {
     const printDiv = document.getElementById('printArea');
+    if (!printDiv) return;
     printDiv.innerHTML = prepareInvoiceHTML(code);
     
     const win = window.open('', '', 'height=700,width=800');
+    if (!win) return alert('الرجاء السماح للمتصفح بفتح النوافذ المنبثقة للطباعة');
     win.document.write('<html><head><title>طباعة الكشف</title></head><body style="margin:0; padding:20px; display:flex; justify-content:center; align-items:center;">');
     win.document.write(printDiv.innerHTML);
     win.document.write('</body></html>');
@@ -539,10 +596,12 @@ function printInvoice(code) {
 
 function downloadInvoiceImage(code) {
     const printDiv = document.getElementById('printArea');
+    if (!printDiv) return;
     printDiv.innerHTML = prepareInvoiceHTML(code);
     printDiv.style.display = 'block';
     
     const card = document.getElementById('invoiceCard');
+    if (!card) return;
     
     html2canvas(card, { 
         scale: 2, 
@@ -560,12 +619,11 @@ function downloadInvoiceImage(code) {
         document.body.removeChild(link);
     }).catch(err => {
         printDiv.style.display = 'none';
-        alert('حدث خطأ في الحفظ التلقائي، يمكنك أخذ لقطة شاشة (Screenshot) مباشرة للكشف.');
-        console.error(err);
+        alert('حدث خطأ في الحفظ، يمكنك أخذ لقطة شاشة (Screenshot) مباشرة للكشف.');
     });
 }
 
-// --- شاشة موحدة لمتابعة حضور ومصاريف الفرع (لكل فرع) ---
+// --- شاشة موحدة لمتابعة حضور ومصاريف الفرع ---
 function renderUnifiedBranchControlPanel(branchName) {
     const today = new Date().toLocaleDateString('ar-EG');
     const employees = DB.get('employees').filter(e => e.branch === branchName && e.active);
@@ -603,14 +661,12 @@ function renderUnifiedBranchControlPanel(branchName) {
                 <button onclick="clearTodayAttendance('${branchName}')" class="bg-red-600 text-white px-4 py-2 rounded-xl text-xs font-semibold">تصفير سجل حضور اليوم</button>
             </div>
 
-            <!-- إحصائيات سريعة للحضور -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div class="bg-white p-5 rounded-2xl shadow-sm border"><p class="text-gray-400 text-xs">إجمالي موظفات الفرع</p><h3 class="text-2xl font-bold mt-1 text-gray-800">${totalCount}</h3></div>
                 <div class="bg-white p-5 rounded-2xl shadow-sm border"><p class="text-gray-400 text-xs">الحاضرات الآن</p><h3 class="text-2xl font-bold mt-1 text-green-600">${presentCount}</h3></div>
                 <div class="bg-white p-5 rounded-2xl shadow-sm border"><p class="text-gray-400 text-xs">الغائبات</p><h3 class="text-2xl font-bold mt-1 text-red-600">${absentCount}</h3></div>
             </div>
 
-            <!-- جدول الحضور والانصراف -->
             <div class="bg-white rounded-2xl shadow-sm border overflow-hidden">
                 <div class="p-4 bg-gray-50 border-b font-bold text-sm text-gray-700">متابعة حضور وانصراف الموظفات لحظةً بلحظة</div>
                 <div class="divide-y">
@@ -628,7 +684,6 @@ function renderUnifiedBranchControlPanel(branchName) {
                 </div>
             </div>
 
-            <!-- قسم المصاريف الخاص بالفرع -->
             <div class="bg-white p-6 rounded-2xl shadow-sm border space-y-4">
                 <div class="flex justify-between items-center">
                     <div>
@@ -677,6 +732,7 @@ function deleteRecord(key, id) {
 // --- 4. Employee Portal ---
 function renderEmployeePortal() {
     const emp = activeEmployee;
+    if (!emp) return '';
     const advances = DB.get('advances').filter(a => a.code === emp.code);
     const deductions = DB.get('deductions').filter(d => d.code === emp.code);
     const paidList = DB.get('salaries_paid').filter(p => p.code === emp.code);
@@ -728,6 +784,7 @@ function renderEmployeePortal() {
 }
 
 function recordAttendance(type) {
+    if (!activeEmployee) return;
     const attendance = DB.get('attendance');
     attendance.push({
         id: Date.now(),
@@ -743,8 +800,12 @@ function recordAttendance(type) {
 }
 
 function requestAdvance() {
-    const amount = parseFloat(document.getElementById('advAmount').value);
-    const reason = document.getElementById('advReason').value;
+    const amountEl = document.getElementById('advAmount');
+    const reasonEl = document.getElementById('advReason');
+    if (!amountEl || !reasonEl || !activeEmployee) return;
+
+    const amount = parseFloat(amountEl.value);
+    const reason = reasonEl.value;
     if (!amount || !reason) return alert('أدخل المبلغ والسبب');
     const advances = DB.get('advances');
     advances.push({
