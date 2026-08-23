@@ -11,7 +11,7 @@ let cloudData = {
     attendance: [],
     advances: [],
     deductions: [],
-    overtime: [], // جدول جديد لتسجيل الأوفر تايم
+    overtime: [], 
     salaries_paid: [],
     expenses: [],
     branch_expense_codes: { 'الدواجن': '1003', 'حدائق حلوان': '1005' },
@@ -25,7 +25,7 @@ database.ref('/').on('value', (snapshot) => {
         cloudData.attendance = data.attendance || [];
         cloudData.advances = data.advances || [];
         cloudData.deductions = data.deductions || [];
-        cloudData.overtime = data.overtime || []; // جلب الأوفر تايم من السحابة
+        cloudData.overtime = data.overtime || []; 
         cloudData.salaries_paid = data.salaries_paid || [];
         cloudData.expenses = data.expenses || [];
         cloudData.official_holidays = data.official_holidays || [];
@@ -322,29 +322,33 @@ function runQuickInquiry() {
         return;
     }
 
-    // حساب أيام الحضور الفريدة المسجلة
     const attendance = DB.get('attendance').filter(a => a.code === emp.code);
     const uniqueDaysPresent = [...new Set(attendance.map(a => a.date))].length;
 
-    // حساب قيمة اليوم (المرتب الأساسي ÷ 30)
     const salary = emp.salary || 0;
-    const dayRate = Math.round((salary / 30) * 100) / 100;
+    let cycleDaysDivisor = 30;
+    let cycleLabelName = 'شهري';
+    if (emp.payCycle === 'weekly') {
+        cycleDaysDivisor = 7;
+        cycleLabelName = 'أسبوعي';
+    } else if (emp.payCycle === 'biweekly') {
+        cycleDaysDivisor = 15;
+        cycleLabelName = 'كل 15 يوم';
+    }
 
-    // القبض بناءً على الحضور (عدد أيام الحضور × قيمة اليوم)
-    const earnedByAttendance = Math.round(uniqueDaysPresent * dayRate * 100) / 100;
+    const cycleBaseRate = Math.round((salary / 30 * cycleDaysDivisor) * 100) / 100;
+    const earnedByAttendance = Math.round((salary / 30) * uniqueDaysPresent * 100) / 100;
 
-    // إجمالي السلف المعتمدة لهذه الموظفة
     const advances = DB.get('advances').filter(a => a.code === emp.code && a.status === 'موافق');
     const totalAdvances = advances.reduce((s, a) => s + a.amount, 0);
 
-    // الصافي النهائي بعد خصم السلف من القبض حسب الحضور
     const netAfterAdvances = Math.round((earnedByAttendance - totalAdvances) * 100) / 100;
 
     resultDiv.innerHTML = `
         <div class="bg-pink-50 border border-pink-200 p-5 rounded-2xl space-y-3 text-sm">
             <div class="flex justify-between items-center border-b pb-2">
-                <span class="font-bold text-gray-800">اسم الموظفة: <span class="text-pink-600">${emp.name}</span></span>
-                <span class="text-gray-500 text-xs">المرتب الشامل بالشهر: <strong>${salary} ج.م</strong></span>
+                <span class="font-bold text-gray-800">اسم الموظفة: <span class="text-pink-600">${emp.name}</span> (${cycleLabelName})</span>
+                <span class="text-gray-500 text-xs">المرتب الأساسي بالشهر: <strong>${salary} ج.م</strong></span>
             </div>
             <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
                 <div class="bg-white p-3 rounded-xl border">
@@ -352,8 +356,8 @@ function runQuickInquiry() {
                     <strong class="text-blue-600 text-lg">${uniqueDaysPresent} يوم</strong>
                 </div>
                 <div class="bg-white p-3 rounded-xl border">
-                    <span class="text-gray-400 text-xs block">قيمة اليوم الواحد</span>
-                    <strong class="text-gray-700 text-lg">${dayRate} ج.م</strong>
+                    <span class="text-gray-400 text-xs block">مستحق الفترة (${cycleLabelName})</span>
+                    <strong class="text-gray-700 text-lg">${cycleBaseRate} ج.م</strong>
                 </div>
                 <div class="bg-white p-3 rounded-xl border">
                     <span class="text-gray-400 text-xs block">القبض حسب الحضور</span>
@@ -365,7 +369,7 @@ function runQuickInquiry() {
                 </div>
             </div>
             <div class="bg-white p-3 rounded-xl border flex justify-between items-center">
-                <span class="font-bold text-gray-700">المستحق النهائي بعد خصم السلف (حسب الحضور الفعلي):</span>
+                <span class="font-bold text-gray-700">المستحق النهائي (حسب الحضور الفعلي ونظام القبض):</span>
                 <strong class="text-pink-600 text-xl">${netAfterAdvances} ج.م</strong>
             </div>
         </div>
@@ -460,7 +464,7 @@ function renderAdminEmployeesTab() {
                     <div class="p-4 flex justify-between items-center">
                         <div>
                             <p class="font-bold">${e.name} <span class="text-xs text-pink-600">(${e.branch})</span></p>
-                            <p class="text-xs text-gray-500">الكود: ${e.code} | المرتب: ${e.salary} ج.م | المواعيد: ${e.workStart || '12:00'} ${e.workStartPeriod || 'صباحاً'} إلى ${e.workEnd || '09:00'} ${e.workEndPeriod || 'مساءً'}</p>
+                            <p class="text-xs text-gray-500">الكود: ${e.code} | المرتب: ${e.salary} ج.م | القبض: ${e.payCycle==='weekly'?'أسبوعي':e.payCycle==='biweekly'?'كل 15 يوم':'شهري'}</p>
                         </div>
                         <button onclick="deleteRecord('employees', ${e.id})" class="text-red-500 text-xs hover:underline">حذف</button>
                     </div>
@@ -490,7 +494,7 @@ function saveNewEmployee() {
     const workStartPeriod = startPerEl ? startPerEl.value : 'صباحاً';
     const workEnd = endEl ? endEl.value : '09:00';
     const workEndPeriod = endPerEl ? endPerEl.value : 'مساءً';
-    const payCycle = cycleEl ? cycleEl.value : 'monthly';
+    const payCycle = cycleEl ? cycleEl.value : 'biweekly';
 
     if (!name || !code || isNaN(salary)) return alert('الرجاء إكمال بيانات الموظفة بشكل صحيح.');
     
@@ -504,7 +508,7 @@ function renderAdminSalariesTab() {
     const employees = DB.get('employees');
     return `
         <div class="space-y-6 max-w-3xl">
-            <h3 class="text-xl font-bold">إدارة وتعديل المرتبات والمواعيد ونظام (صباحاً / مساءً)</h3>
+            <h3 class="text-xl font-bold">إدارة وتعديل المرتبات والمواعيد ونظام القبض</h3>
             <div class="bg-white p-6 rounded-2xl shadow-sm border space-y-4">
                 ${employees.map(e => `
                     <div class="p-4 bg-gray-50 rounded-xl space-y-3">
@@ -517,7 +521,7 @@ function renderAdminSalariesTab() {
                                 <input type="number" id="sal_${e.id}" value="${e.salary}" class="w-full px-3 py-1.5 border rounded-lg bg-white text-xs">
                             </div>
                             <div>
-                                <label class="block text-[10px] text-gray-400">حضور (وقت + فترة)</label>
+                                <label class="block text-[10px] text-gray-400">حضور</label>
                                 <div class="flex gap-1">
                                     <input type="time" id="start_${e.id}" value="${e.workStart || '12:00'}" class="w-2/3 px-2 py-1.5 border rounded-lg bg-white text-xs">
                                     <select id="startPer_${e.id}" class="w-1/3 px-1 py-1.5 border rounded-lg bg-white text-[10px]">
@@ -527,7 +531,7 @@ function renderAdminSalariesTab() {
                                 </div>
                             </div>
                             <div>
-                                <label class="block text-[10px] text-gray-400">انصراف (وقت + فترة)</label>
+                                <label class="block text-[10px] text-gray-400">انصراف</label>
                                 <div class="flex gap-1">
                                     <input type="time" id="end_${e.id}" value="${e.workEnd || '09:00'}" class="w-2/3 px-2 py-1.5 border rounded-lg bg-white text-xs">
                                     <select id="endPer_${e.id}" class="w-1/3 px-1 py-1.5 border rounded-lg bg-white text-[10px]">
@@ -537,7 +541,7 @@ function renderAdminSalariesTab() {
                                 </div>
                             </div>
                             <div class="md:col-span-2">
-                                <label class="block text-[10px] text-gray-400">نظام القبض</label>
+                                <label class="block text-[10px] text-gray-400">نظام القبض (يؤثر على الحسابات والخصومات)</label>
                                 <select id="cycle_${e.id}" class="w-full px-3 py-1.5 border rounded-lg bg-white text-xs">
                                     <option value="weekly" ${e.payCycle==='weekly'?'selected':''}>أسبوعي</option>
                                     <option value="biweekly" ${e.payCycle==='biweekly'||!e.payCycle?'selected':''}>كل 15 يوم</option>
@@ -622,7 +626,6 @@ function saveDeduction() {
     amountEl.value = ''; reasonEl.value = '';
 }
 
-// --- تبويب إدارة وإضافة الأوفر تايم ---
 function renderAdminOvertimeTab() {
     const employees = DB.get('employees');
     const overtimeList = DB.get('overtime');
@@ -634,8 +637,8 @@ function renderAdminOvertimeTab() {
                     ${employees.map(e => `<option value="${e.code}">${e.name} (${e.branch} - ${e.code})</option>`).join('')}
                 </select>
                 <input type="number" id="ovHours" placeholder="عدد ساعات الأوفر تايم (مثال: 2)" class="w-full px-4 py-2.5 border rounded-xl">
-                <input type="number" id="ovAmount" placeholder="أو اكتب المبلغ المالي مباشرة (اختياري، أو اتركه ليحسب تلقائياً)" class="w-full px-4 py-2.5 border rounded-xl">
-                <input type="text" id="ovReason" placeholder="سبب الأوفر تايم (مثال: شغل إضافي بعد الوردية، موسم زحمة...)" class="w-full px-4 py-2.5 border rounded-xl">
+                <input type="number" id="ovAmount" placeholder="أو اكتب المبلغ المالي مباشرة (اختياري)" class="w-full px-4 py-2.5 border rounded-xl">
+                <input type="text" id="ovReason" placeholder="سبب الأوفر تايم (مثال: شغل إضافي بعد الوردية...)" class="w-full px-4 py-2.5 border rounded-xl">
                 <button onclick="saveOvertime()" class="bg-pink-600 text-white px-6 py-2.5 rounded-xl font-semibold">تسجيل الأوفر تايم وتسميعه في حساب الموظفة</button>
             </div>
 
@@ -785,7 +788,7 @@ function renderAdminInquiryTab() {
                                     <p class="text-xs text-gray-500 mt-1">نظام القبض: <span class="font-bold text-gray-700">${cycleName}</span> | الأساسي: ${e.salary} | الخصومات: -${empDed} | السلف: -${empAdv} | أوفر تايم: <span class="text-green-600 font-bold">+${empOv}</span> | <strong>الصافي: ${net} ج.م</strong></p>
                                 </div>
                                 <div class="flex items-center gap-2 flex-wrap">
-                                    <button onclick="markAsPaidCycle('${e.code}', '${e.name}', '${e.payCycle || 'biweekly'}')" class="bg-green-600 text-white px-4 py-2 rounded-xl text-xs font-semibold hover:bg-green-700 transition">تأكيد القبض (متكرر)</button>
+                                    <button onclick="markAsPaidCycle('${e.code}', '${e.name}', '${e.payCycle || 'biweekly'}')" class="bg-green-600 text-white px-4 py-2 rounded-xl text-xs font-semibold hover:bg-green-700 transition">تأكيد القبض (${cycleName})</button>
                                     <button onclick="printInvoice('${e.code}')" class="bg-gray-800 text-white px-4 py-2 rounded-xl text-xs font-semibold">طباعة الكشف</button>
                                     <button onclick="downloadInvoiceImage('${e.code}')" class="bg-pink-600 text-white px-4 py-2 rounded-xl text-xs font-semibold">حفظ كصورة</button>
                                 </div>
@@ -814,7 +817,7 @@ function renderAdminInquiryTab() {
 }
 
 function markAsPaidCycle(code, name, cycle) {
-    let periodName = 'دفعة / فترة مرتب جديدة';
+    let periodName = 'دفعة مرتب جديدة';
     if (cycle === 'weekly') {
         periodName = 'دفعة أسبوعية جديدة';
     } else if (cycle === 'biweekly') {
@@ -984,22 +987,31 @@ function renderUnifiedBranchControlPanel(branchName) {
             </div>
 
             <div class="bg-white rounded-2xl shadow-sm border overflow-hidden">
-                <div class="p-4 bg-gray-50 border-b font-bold text-sm text-gray-700">متابعة الحضور، أسباب التأخير والانصراف المبكر، وإدارة الإجازات</div>
+                <div class="p-4 bg-gray-50 border-b font-bold text-sm text-gray-700">متابعة الحضور، وتعديل أوقات الدخول والخصومات، وإدارة الإجازات</div>
                 <div class="divide-y">
                     ${reportData.map(r => `
-                        <div class="p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
+                        <div class="p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
                             <div>
                                 <p class="font-bold text-gray-800">${r.name} <span class="text-xs text-gray-400">(كود: ${r.code})</span></p>
-                                <p class="text-xs text-gray-500 mt-1">
-                                    ${r.records.map(rec => `${rec.type}: ${rec.time} (${rec.period || ''}) ${rec.delayMinutes ? `(تأخير: ${rec.delayMinutes} دقيقة)` : ''}`).join(' | ') || 'لا توجد تسجيلات حضور بعد'}
-                                </p>
+                                <div class="mt-1 space-y-1">
+                                    ${r.records.map(rec => `
+                                        <div class="flex items-center gap-2 text-xs bg-gray-50 p-2 rounded-lg border flex-wrap">
+                                            <span class="font-bold text-pink-600">${rec.type}:</span> <span>${rec.time} (${rec.period || ''})</span>
+                                            ${rec.delayMinutes ? `<span class="text-red-500">(تأخير: ${rec.delayMinutes}د)</span>` : ''}
+                                            <div class="mr-auto flex items-center gap-1.5">
+                                                <button onclick="editAttendanceTimePrompt(${rec.id})" class="text-blue-600 hover:underline font-bold px-2.5 py-1 bg-blue-50 rounded">تعديل الوقت</button>
+                                                <button onclick="deleteAttendanceRecord(${rec.id})" class="text-red-600 hover:underline font-bold px-2.5 py-1 bg-red-50 rounded">حذف</button>
+                                            </div>
+                                        </div>
+                                    `).join('') || '<p class="text-xs text-gray-400">لا توجد تسجيلات حضور بعد اليوم</p>'}
+                                </div>
                                 ${r.empDedToday.length ? `
                                     <div class="mt-1 text-[11px] text-red-600 font-semibold">
                                         أسباب الخصومات اليوم: ${r.empDedToday.map(d => `${d.reason} (- ${d.amount} ج.م)`).join(' | ')}
                                     </div>
                                 ` : ''}
                             </div>
-                            <div class="flex items-center gap-3">
+                            <div class="flex items-center gap-3 flex-wrap">
                                 <span class="px-3 py-1 rounded-xl text-xs font-bold ${r.badgeColor}">${r.status}</span>
                                 <button onclick="toggleEmployeeHoliday('${r.code}', '${today}')" class="px-3 py-1.5 rounded-xl text-xs font-semibold ${r.isHolidayToday ? 'bg-gray-200 text-gray-700' : 'bg-amber-600 text-white'}">
                                     ${r.isHolidayToday ? 'إلغاء الإجازة' : 'جعل اليوم إجازة'}
@@ -1013,11 +1025,93 @@ function renderUnifiedBranchControlPanel(branchName) {
     `;
 }
 
+function editAttendanceTimePrompt(recId) {
+    let attendance = DB.get('attendance');
+    const rec = attendance.find(a => a.id === recId);
+    if (!rec) return;
+
+    const employees = DB.get('employees');
+    const emp = employees.find(e => e.code === rec.code);
+    if (!emp) return alert('الموظفة غير موجودة.');
+
+    const newTimeInput = prompt(`أدخل الوقت الجديد لـ (${rec.type}) بصيغة 12 ساعة مع تحديد (صباحاً / مساءً)\nمثال: 01:00 مساءً أو 12:30 ظهراً:`, rec.time + ' ' + (rec.period || ''));
+    if (!newTimeInput) return;
+
+    // استخلاص الساعات والدقائق والفترة
+    const isPM = newTimeInput.includes('مساء') || newTimeInput.includes('PM') || newTimeInput.includes('م');
+    const isAM = newTimeInput.includes('صباح') || newTimeInput.includes('AM') || newTimeInput.includes('ص');
+    let period = isPM ? 'مساءً' : (isAM ? 'صباحاً' : (rec.period || 'مساءً'));
+
+    // تنظيف النص لاستخراج الوقت HH:MM
+    const timeClean = newTimeInput.replace(/[^\d:]/g, '');
+    let parts = timeClean.split(':');
+    if (parts.length < 2) return alert('صيغة الوقت غير صحيحة. الرجاء إدخال الوقت بشكل صحيح.');
+
+    let hours = parseInt(parts[0]);
+    let minutes = parseInt(parts[1]);
+    if (isNaN(hours) || isNaN(minutes)) return alert('أرقام الوقت غير صالحة.');
+
+    // إعادة حساب التأخير أو الانصراف المبكر الجديد بناءً على وقت الموظفة المحدد
+    let targetTimeStr = (rec.type === 'حضور') ? (emp.workStart || '12:00') : (emp.workEnd || '09:00');
+    let targetPeriodStr = (rec.type === 'حضور') ? (emp.workStartPeriod || 'صباحاً') : (emp.workEndPeriod || 'مساءً');
+
+    let targetTotalMins = convertTo24Hour(targetTimeStr, targetPeriodStr);
+    
+    // تحويل الوقت المدخل الجديد لـ 24 ساعة
+    let tempH = hours;
+    if (period === 'مساءً' && tempH < 12) tempH += 12;
+    if (period === 'صباحاً' && tempH === 12) tempH = 0;
+    let newTotalMins = tempH * 60 + minutes;
+
+    const minuteRate = calculateDynamicMinuteRate(emp);
+
+    // تحديث السجل في قاعدة البيانات
+    attendance = attendance.map(item => {
+        if (item.id === recId) {
+            let updatedItem = { ...item, time: `${hours < 10 ? '0' + hours : hours}:${minutes < 10 ? '0' + minutes : minutes}`, period };
+            if (rec.type === 'حضور') {
+                let delayMinutes = 0;
+                let holidays = DB.get('official_holidays');
+                let isHolidayToday = holidays.some(h => h.code === emp.code && h.date === item.date);
+                
+                if (!isHolidayToday && newTotalMins > targetTotalMins) {
+                    delayMinutes = newTotalMins - targetTotalMins;
+                    updatedItem.delayMinutes = delayMinutes;
+                    
+                    // إضافة خصم التأخير الجديد
+                    let deductions = DB.get('deductions').filter(d => !(d.code === emp.code && d.date === item.date && d.reason.includes('تأخير حضور')));
+                    let deductionAmount = Math.round(delayMinutes * minuteRate * 100) / 100;
+                    deductions.push({ id: Date.now(), code: emp.code, amount: deductionAmount, reason: `تأخير حضور يوم ${item.date} (${delayMinutes} دقيقة - بعد التعديل)`, isSystem: true, date: item.date });
+                    DB.set('deductions', deductions);
+                } else {
+                    updatedItem.delayMinutes = 0;
+                    // إزالة خصم التأخير القديم لو أصبح ليس متأخراً
+                    let deductions = DB.get('deductions').filter(d => !(d.code === emp.code && d.date === item.date && d.reason.includes('تأخير حضور')));
+                    DB.set('deductions', deductions);
+                }
+            }
+            return updatedItem;
+        }
+        return item;
+    });
+
+    DB.set('attendance', attendance);
+    alert('تم تعديل الوقت بنجاح وتحديث الحسابات والخصومات على السحابة.');
+}
+
+function deleteAttendanceRecord(recId) {
+    if (!confirm('هل أنت متأكد من حذف سجل الحضور/الانصراف هذا وتعديل حالة الموظفة بالسيستم؟')) return;
+    let attendance = DB.get('attendance');
+    attendance = attendance.filter(item => item.id !== recId);
+    DB.set('attendance', attendance);
+    alert('تم حذف السجل وتحديث السيستم بنجاح.');
+}
+
 function clearBranchExpenses(branchName) {
     if (!confirm(`هل أنت متأكد من تصفير ومسح جميع مصروفات فرع ${branchName}؟`)) return;
     let expenses = DB.get('expenses').filter(x => x.branch !== branchName);
     DB.set('expenses', expenses);
-    alert(`تم تصفير مسح مصروفات فرع ${branchName} بنجاح.`);
+    alert(`تم تصفير ومسح مصروفات فرع ${branchName} بنجاح.`);
 }
 
 function toggleEmployeeHoliday(code, today) {
@@ -1071,6 +1165,7 @@ function renderEmployeePortal() {
     const totalAdv = advances.filter(a => a.status === 'موافق').reduce((sum, a) => sum + a.amount, 0);
     const totalOv = overtimeList.reduce((sum, o) => sum + o.amount, 0);
     const net = emp.salary - totalDed - totalAdv + totalOv;
+    const cycleName = emp.payCycle === 'weekly' ? 'أسبوعي' : emp.payCycle === 'biweekly' ? 'كل 15 يوم' : 'شهري';
 
     return `
         <header class="bg-white shadow-sm px-6 py-4 flex justify-between items-center">
@@ -1081,7 +1176,9 @@ function renderEmployeePortal() {
                     <span>•</span>
                     <span>🆔 كود البصمة: <strong>${emp.code}</strong></span>
                     <span>•</span>
-                    <span>⏰ مواعيد العمل: من <strong class="text-gray-900">${emp.workStart || '12:00'} ${emp.workStartPeriod || 'صباحاً'}</strong> إلى <strong class="text-gray-900">${emp.workEnd || '09:00'} ${emp.workEndPeriod || 'مساءً'}</strong></span>
+                    <span>💰 نظام القبض: <strong class="text-gray-900">${cycleName}</strong></span>
+                    <span>•</span>
+                    <span>⏰ المواعيد: من <strong class="text-gray-900">${emp.workStart || '12:00'} ${emp.workStartPeriod || 'صباحاً'}</strong> إلى <strong class="text-gray-900">${emp.workEnd || '09:00'} ${emp.workEndPeriod || 'مساءً'}</strong></span>
                 </div>
             </div>
             <button onclick="currentView='login_portal'; activeEmployee=null; sessionStorage.clear(); render();" class="text-red-600 font-semibold hover:underline text-sm">تسجيل الخروج</button>
@@ -1107,7 +1204,6 @@ function renderEmployeePortal() {
                 </div>
             ` : ''}
 
-            <!-- عرض الأوفر تايم بوضوح للموظفة -->
             ${overtimeList.length ? `
                 <div class="bg-green-50 border border-green-200 p-5 rounded-3xl space-y-2">
                     <h4 class="font-bold text-green-700 text-sm">🌟 تمت إضافة مستحقات أوفر تايم (وقت إضافي) لحسابك:</h4>
@@ -1122,7 +1218,6 @@ function renderEmployeePortal() {
                 </div>
             ` : ''}
 
-            <!-- عرض الخصومات اليدوية الإضافية -->
             ${manualDeductions.length ? `
                 <div class="bg-red-50 border border-red-200 p-5 rounded-3xl space-y-2">
                     <h4 class="font-bold text-red-700 text-sm">⚠️ تم تسجيل خصومات إضافية على حسابك:</h4>
@@ -1155,7 +1250,7 @@ function renderEmployeePortal() {
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div class="bg-white p-5 rounded-2xl shadow-sm border"><p class="text-gray-400 text-sm">المرتب الأساسي</p><h3 class="text-2xl font-bold mt-1">${emp.salary} ج.م</h3></div>
-                <div class="bg-white p-5 rounded-2xl shadow-sm border"><p class="text-gray-400 text-sm">الصافي المستحق النهائي</p><h3 class="text-2xl font-bold mt-1 text-pink-600">${net} ج.م</h3></div>
+                <div class="bg-white p-5 rounded-2xl shadow-sm border"><p class="text-gray-400 text-sm">الصافي المستحق النهائي (${cycleName})</p><h3 class="text-2xl font-bold mt-1 text-pink-600">${net} ج.م</h3></div>
             </div>
         </main>
     `;
