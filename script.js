@@ -1,4 +1,4 @@
-// --- إعدادات الاتصال بـ Firebase Realtime Database ---[cite: 8]
+// --- إعدادات الاتصال بـ Firebase Realtime Database ---
 const firebaseConfig = {
     databaseURL: "https://nosa-salon-db-default-rtdb.europe-west1.firebasedatabase.app/"
 };
@@ -91,36 +91,6 @@ function render() {
         currentView = 'login_portal';
         render();
     }
-}
-
-// --- دالة مساعدة لتنسيق عرض الوقت بصيغة 12 ساعة بدقة ---
-function formatDisplayTime(timeStr, periodStr) {
-    if (!timeStr) return '12:00 صباحاً';
-    let cleanTime = timeStr.trim();
-    let finalPeriod = periodStr ? periodStr : 'مساءً';
-    
-    if (cleanTime.includes(':')) {
-        let parts = cleanTime.split(':');
-        let h = parseInt(parts[0], 10);
-        let m = parts[1] || '00';
-        
-        if (h > 12) {
-            h -= 12;
-            finalPeriod = 'مساءً';
-        } else if (h === 12) {
-            finalPeriod = 'مساءً';
-        } else if (h === 0) {
-            h = 12;
-            finalPeriod = 'صباحاً';
-        } else {
-            if (!periodStr) {
-                finalPeriod = 'صباحاً';
-            }
-        }
-        let formattedH = h < 10 ? '0' + h : h;
-        return `${formattedH}:${m} ${finalPeriod}`;
-    }
-    return `${cleanTime} ${finalPeriod}`;
 }
 
 // --- 1. Login Portal ---
@@ -303,6 +273,7 @@ function renderAdminAnalyticsDashboard() {
                 <div class="bg-white p-5 rounded-2xl shadow-sm border"><p class="text-gray-400 text-xs">مصاريف حدائق حلوان</p><h3 class="text-xl font-bold mt-1 text-purple-600">${expHadayek} ج.م</h3></div>
             </div>
 
+            <!-- بند الاستعلام السريع بكود الموظف في الصفحة الرئيسية للأدمن -->
             <div class="bg-white p-6 rounded-2xl shadow-sm border space-y-4">
                 <h4 class="font-bold text-lg text-pink-600">استعلام سريع عن مستحقات موظفة بكود البصمة</h4>
                 <div class="flex gap-2">
@@ -665,7 +636,7 @@ function renderAdminOvertimeTab() {
                 <select id="ovEmpCode" class="w-full px-4 py-2.5 border rounded-xl bg-white">
                     ${employees.map(e => `<option value="${e.code}">${e.name} (${e.branch} - ${e.code})</option>`).join('')}
                 </select>
-                <input type="number" id="ovHours" placeholder="عدد ساعات الأوفر تايم (مثال: 2 أو 1.5)" step="0.5" class="w-full px-4 py-2.5 border rounded-xl">
+                <input type="number" id="ovHours" placeholder="عدد ساعات الأوفر تايم (مثال: 2)" class="w-full px-4 py-2.5 border rounded-xl">
                 <input type="number" id="ovAmount" placeholder="أو اكتب المبلغ المالي مباشرة (اختياري)" class="w-full px-4 py-2.5 border rounded-xl">
                 <input type="text" id="ovReason" placeholder="سبب الأوفر تايم (مثال: شغل إضافي بعد الوردية...)" class="w-full px-4 py-2.5 border rounded-xl">
                 <button onclick="saveOvertime()" class="bg-pink-600 text-white px-6 py-2.5 rounded-xl font-semibold">تسجيل الأوفر تايم وتسميعه في حساب الموظفة</button>
@@ -700,26 +671,10 @@ function saveOvertime() {
     const emp = employees.find(e => e.code === code);
     if (!emp) return alert('الموظفة غير موجودة.');
 
-    // --- تم ضبط حساب الأوفر تايم بدقة حسب رغبتك: المرتب مقسوم على مدة الفترة، ثم مقسوم على ساعات اليوم ---
     if (!amount || isNaN(amount)) {
         if (hours <= 0) return alert('الرجاء إدخال عدد ساعات الأوفر تايم أو المبلغ المالي بشكل صحيح.');
-        
-        let cycleDaysDivisor = 30; // افتراضي الشهر الكامل
-        if (emp.payCycle === 'weekly') cycleDaysDivisor = 7;
-        else if (emp.payCycle === 'biweekly') cycleDaysDivisor = 15;
-
-        const startMins = convertTo24Hour(emp.workStart || '12:00', emp.workStartPeriod || 'صباحاً');
-        const endMins = convertTo24Hour(emp.workEnd || '09:00', emp.workEndPeriod || 'مساءً');
-        let shiftDurationMins = endMins - startMins;
-        if (shiftDurationMins <= 0) shiftDurationMins += 24 * 60;
-        const shiftHours = shiftDurationMins / 60 > 0 ? shiftDurationMins / 60 : 8;
-
-        // المعادلة المباشرة: (المرتب ÷ أيام الفترة) = يومية العامل، ثم (اليومية ÷ ساعات الوردية) = سعر الساعة
-        const periodSalary = (emp.salary / 30) * cycleDaysDivisor;
-        const dailyRate = periodSalary / cycleDaysDivisor;
-        const hourlyRate = dailyRate / shiftHours; 
-        
-        amount = Math.round(hours * hourlyRate * 100) / 100;
+        const minuteRate = calculateDynamicMinuteRate(emp);
+        amount = Math.round(hours * 60 * minuteRate * 100) / 100;
     }
 
     if (!reason) return alert('الرجاء كتابة سبب الأوفر تايم.');
@@ -1082,10 +1037,12 @@ function editAttendanceTimePrompt(recId) {
     const newTimeInput = prompt(`أدخل الوقت الجديد لـ (${rec.type}) بصيغة 12 ساعة مع تحديد (صباحاً / مساءً)\nمثال: 01:00 مساءً أو 12:30 ظهراً:`, rec.time + ' ' + (rec.period || ''));
     if (!newTimeInput) return;
 
+    // استخلاص الساعات والدقائق والفترة
     const isPM = newTimeInput.includes('مساء') || newTimeInput.includes('PM') || newTimeInput.includes('م');
     const isAM = newTimeInput.includes('صباح') || newTimeInput.includes('AM') || newTimeInput.includes('ص');
     let period = isPM ? 'مساءً' : (isAM ? 'صباحاً' : (rec.period || 'مساءً'));
 
+    // تنظيف النص لاستخراج الوقت HH:MM
     const timeClean = newTimeInput.replace(/[^\d:]/g, '');
     let parts = timeClean.split(':');
     if (parts.length < 2) return alert('صيغة الوقت غير صحيحة. الرجاء إدخال الوقت بشكل صحيح.');
@@ -1094,11 +1051,13 @@ function editAttendanceTimePrompt(recId) {
     let minutes = parseInt(parts[1]);
     if (isNaN(hours) || isNaN(minutes)) return alert('أرقام الوقت غير صالحة.');
 
+    // إعادة حساب التأخير أو الانصراف المبكر الجديد بناءً على وقت الموظفة المحدد
     let targetTimeStr = (rec.type === 'حضور') ? (emp.workStart || '12:00') : (emp.workEnd || '09:00');
     let targetPeriodStr = (rec.type === 'حضور') ? (emp.workStartPeriod || 'صباحاً') : (emp.workEndPeriod || 'مساءً');
 
     let targetTotalMins = convertTo24Hour(targetTimeStr, targetPeriodStr);
     
+    // تحويل الوقت المدخل الجديد لـ 24 ساعة
     let tempH = hours;
     if (period === 'مساءً' && tempH < 12) tempH += 12;
     if (period === 'صباحاً' && tempH === 12) tempH = 0;
@@ -1106,6 +1065,7 @@ function editAttendanceTimePrompt(recId) {
 
     const minuteRate = calculateDynamicMinuteRate(emp);
 
+    // تحديث السجل في قاعدة البيانات
     attendance = attendance.map(item => {
         if (item.id === recId) {
             let updatedItem = { ...item, time: `${hours < 10 ? '0' + hours : hours}:${minutes < 10 ? '0' + minutes : minutes}`, period };
@@ -1118,12 +1078,14 @@ function editAttendanceTimePrompt(recId) {
                     delayMinutes = newTotalMins - targetTotalMins;
                     updatedItem.delayMinutes = delayMinutes;
                     
+                    // إضافة خصم التأخير الجديد
                     let deductions = DB.get('deductions').filter(d => !(d.code === emp.code && d.date === item.date && d.reason.includes('تأخير حضور')));
                     let deductionAmount = Math.round(delayMinutes * minuteRate * 100) / 100;
                     deductions.push({ id: Date.now(), code: emp.code, amount: deductionAmount, reason: `تأخير حضور يوم ${item.date} (${delayMinutes} دقيقة - بعد التعديل)`, isSystem: true, date: item.date });
                     DB.set('deductions', deductions);
                 } else {
                     updatedItem.delayMinutes = 0;
+                    // إزالة خصم التأخير القديم لو أصبح ليس متأخراً
                     let deductions = DB.get('deductions').filter(d => !(d.code === emp.code && d.date === item.date && d.reason.includes('تأخير حضور')));
                     DB.set('deductions', deductions);
                 }
@@ -1205,9 +1167,6 @@ function renderEmployeePortal() {
     const net = emp.salary - totalDed - totalAdv + totalOv;
     const cycleName = emp.payCycle === 'weekly' ? 'أسبوعي' : emp.payCycle === 'biweekly' ? 'كل 15 يوم' : 'شهري';
 
-    const formattedStartTime = formatDisplayTime(emp.workStart || '12:00', emp.workStartPeriod || 'صباحاً');
-    const formattedEndTime = formatDisplayTime(emp.workEnd || '09:00', emp.workEndPeriod || 'مساءً');
-
     return `
         <header class="bg-white shadow-sm px-6 py-4 flex justify-between items-center">
             <div>
@@ -1219,7 +1178,7 @@ function renderEmployeePortal() {
                     <span>•</span>
                     <span>💰 نظام القبض: <strong class="text-gray-900">${cycleName}</strong></span>
                     <span>•</span>
-                    <span>⏰ مواعيد العمل: من <strong class="text-gray-900">${formattedStartTime}</strong> إلى <strong class="text-gray-900">${formattedEndTime}</strong></span>
+                    <span>⏰ المواعيد: من <strong class="text-gray-900">${emp.workStart || '12:00'} ${emp.workStartPeriod || 'صباحاً'}</strong> إلى <strong class="text-gray-900">${emp.workEnd || '09:00'} ${emp.workEndPeriod || 'مساءً'}</strong></span>
                 </div>
             </div>
             <button onclick="currentView='login_portal'; activeEmployee=null; sessionStorage.clear(); render();" class="text-red-600 font-semibold hover:underline text-sm">تسجيل الخروج</button>
@@ -1319,12 +1278,7 @@ function calculateDynamicMinuteRate(emp) {
     const shiftHours = shiftDurationMins / 60;
     const effectiveHours = shiftHours > 0 ? shiftHours : 8;
     
-    let cycleDaysDivisor = 30;
-    if (emp.payCycle === 'weekly') cycleDaysDivisor = 7;
-    else if (emp.payCycle === 'biweekly') cycleDaysDivisor = 15;
-
-    const periodSalary = (emp.salary / 30) * cycleDaysDivisor;
-    const dailyRate = periodSalary / cycleDaysDivisor;
+    const dailyRate = emp.salary / 30;
     const minuteRate = (dailyRate / effectiveHours) / 60;
     return minuteRate;
 }
