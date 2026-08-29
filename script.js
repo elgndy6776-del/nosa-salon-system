@@ -15,7 +15,10 @@ let attendance=JSON.parse(localStorage.getItem("payAttendance")||"null")||[];
 let loans=JSON.parse(localStorage.getItem("payLoans")||"null")||[];
 let adjustments=JSON.parse(localStorage.getItem("payAdjustments")||"null")||[];
 let overtime=JSON.parse(localStorage.getItem("payOvertime")||"null")||[];
-let sessionEmployee=null, loginMode="admin", lastPayroll=[];
+let expenses=JSON.parse(localStorage.getItem("payExpenses")||"null")||[];
+let branchCodes=JSON.parse(localStorage.getItem("payBranchCodes")||"null")||{الحدايق:"",الدواجن:""};
+let sessionEmployee=null, sessionBranch=null, loginMode="admin", lastPayroll=[];
+let cloudLoaded=false, cloudWriting=false;
 const savedSession=JSON.parse(sessionStorage.getItem("paySession")||"null");
 
 function save(){
@@ -24,8 +27,46 @@ function save(){
  localStorage.setItem("payLoans",JSON.stringify(loans));
  localStorage.setItem("payAdjustments",JSON.stringify(adjustments));
  localStorage.setItem("payOvertime",JSON.stringify(overtime));
+ localStorage.setItem("payExpenses",JSON.stringify(expenses));
+ localStorage.setItem("payBranchCodes",JSON.stringify(branchCodes));
  localStorage.setItem("paySettings",JSON.stringify(settings));
+ if(window.nosaDB && cloudLoaded && !cloudWriting){
+   cloudWriting=true;
+   const state={employees,attendance,loans,adjustments,overtime,expenses,branchCodes,settings,updatedAt:Date.now()};
+   window.nosaDB.ref("nosaPayroll/state").set(state).catch(err=>console.error(err)).finally(()=>cloudWriting=false);
+ }
 }
+function applyCloudState(v){
+ if(!v)return;
+ employees=Array.isArray(v.employees)?v.employees:[];
+ attendance=Array.isArray(v.attendance)?v.attendance:[];
+ loans=Array.isArray(v.loans)?v.loans:[];
+ adjustments=Array.isArray(v.adjustments)?v.adjustments:[];
+ overtime=Array.isArray(v.overtime)?v.overtime:[];
+ expenses=Array.isArray(v.expenses)?v.expenses:[];
+ branchCodes=v.branchCodes||{الحدايق:"",الدواجن:""};
+ settings=v.settings||settings;
+ localStorage.setItem("payEmployees",JSON.stringify(employees));
+ localStorage.setItem("payAttendance",JSON.stringify(attendance));
+ localStorage.setItem("payLoans",JSON.stringify(loans));
+ localStorage.setItem("payAdjustments",JSON.stringify(adjustments));
+ localStorage.setItem("payOvertime",JSON.stringify(overtime));
+ localStorage.setItem("payExpenses",JSON.stringify(expenses));
+ localStorage.setItem("payBranchCodes",JSON.stringify(branchCodes));
+ localStorage.setItem("paySettings",JSON.stringify(settings));
+ prepForms();
+ renderDashboard(); renderEmployees(); renderAttendance(); renderLoans(); renderAdjustments(); renderOvertime(); renderPayroll(); renderExpenses(); renderBranchPortal();
+}
+function initCloud(){
+ if(!window.nosaDB)return;
+ window.nosaDB.ref("nosaPayroll/state").on("value",snap=>{
+   const v=snap.val();
+   if(v){ applyCloudState(v); }
+   else { cloudLoaded=true; save(); return; }
+   cloudLoaded=true;
+ });
+}
+function cloudStatus(){return window.nosaDB&&cloudLoaded}
 function toast(m){let t=$("#toast");t.textContent=m;t.classList.add("show");clearTimeout(window.tt);window.tt=setTimeout(()=>t.classList.remove("show"),2200)}
 function emp(id){return employees.find(e=>e.id===id)}
 function empByCode(code){return employees.find(e=>e.code===code&&e.active)}
@@ -83,6 +124,7 @@ function renderDashboard(){
  $("#dLate").textContent=late;$("#dOvertime").textContent=overtime.reduce((s,x)=>s+(inRange(x.date,periodRange(ds,"شهري"))?Number(x.hours):0),0).toFixed(2);
  $("#dDeductions").textContent=money(adjustments.reduce((s,x)=>s+(inRange(x.date,periodRange(ds,"شهري"))?Number(x.amount):0),0));
  $("#dLoans").textContent=money(loans.reduce((s,x)=>s+(inRange(x.date,periodRange(ds,"شهري"))?Number(x.deduct):0),0));
+ $("#dExpenses").textContent=money(expenses.filter(x=>x.date===ds).reduce((s,x)=>s+Number(x.amount||0),0));
  let branches=["الحدايق","الدواجن"], counts=branches.map(b=>({b,n:todayAtt.filter(a=>emp(a.employeeId)?.branch===b&&a.in).length}));
  let max=Math.max(1,...counts.map(x=>x.n));
  let alerts=[];
@@ -123,6 +165,23 @@ function renderPayroll(){
  let sums=list.reduce((a,x)=>{a.base+=x.base;a.d+=x.lateDed+x.deduction+x.penalties+x.loan;a.ot+=x.ot;a.net+=x.net;return a},{base:0,d:0,ot:0,net:0});
  $("#payrollSummary").innerHTML=[["إجمالي الأساسي",sums.base],["إجمالي الخصومات",sums.d],["إجمالي الأوفر تايم",sums.ot],["صافي المرتبات",sums.net]].map(x=>`<div class="sum"><span>${x[0]}</span><b>${money(x[1])}</b></div>`).join("");
 }
+function renderExpenses(){
+ let d=$("#expenseDate")?.value||today(), b=$("#expenseBranchFilter")?.value||"all";
+ let list=expenses.filter(x=>(!d||x.date===d)&&(b==="all"||x.branch===b)).sort((a,b)=>b.createdAt-a.createdAt);
+ const total=(br)=>expenses.filter(x=>x.date===d&&x.branch===br).reduce((s,x)=>s+Number(x.amount||0),0);
+ $("#expHadayekTotal").textContent=money(total("الحدايق"));
+ $("#expDawagenTotal").textContent=money(total("الدواجن"));
+ const breakdown=(br)=>{let m={};expenses.filter(x=>x.date===d&&x.branch===br).forEach(x=>m[x.type]=(m[x.type]||0)+Number(x.amount||0));return Object.entries(m).map(([k,v])=>`<div class="emp-row"><span>${esc(k)}</span><b>${money(v)}</b></div>`).join("")||`<div class="muted">لا توجد مصروفات اليوم.</div>`};
+ $("#expHadayekBreakdown").innerHTML=breakdown("الحدايق");$("#expDawagenBreakdown").innerHTML=breakdown("الدواجن");
+ $("#expensesTable").innerHTML=list.length?list.map(x=>`<tr><td>${fmtDate(x.date)}</td><td>${esc(x.branch)}</td><td>${esc(x.type)}</td><td><b>${money(x.amount)}</b></td><td>${esc(x.reason||"—")}</td><td><button class="mini-btn danger" data-del-exp="${x.id}">حذف</button></td></tr>`).join(""):`<tr><td colspan="6" class="muted">لا توجد مصروفات مطابقة.</td></tr>`;
+}
+function renderBranchPortal(){
+ if(!sessionBranch)return;
+ $("#branchName").textContent=`فرع ${sessionBranch}`;
+ let d=today(), list=expenses.filter(x=>x.branch===sessionBranch&&x.date===d).sort((a,b)=>b.createdAt-a.createdAt);
+ $("#branchTodayTotal").textContent=money(list.reduce((s,x)=>s+Number(x.amount||0),0))+" اليوم";
+ $("#branchExpenseList").innerHTML=list.length?list.map(x=>`<div class="emp-row"><span><b>${esc(x.type)}</b> — ${esc(x.reason||"بدون بيان")}</span><b>${money(x.amount)}</b></div>`).join(""):`<div class="muted">لم تسجل مصروفات اليوم.</div>`;
+}
 function renderReport(){
  let id=$("#reportEmployee").value,end=$("#reportEnd").value||today(),cycle=$("#reportCycle").value,e=emp(id);
  if(!e){$("#reportPreview").innerHTML="";return}
@@ -131,7 +190,7 @@ function renderReport(){
  <div class="report-total"><div><span>الأساسي</span><b>${money(x.base)}</b></div><div><span>الأوفر تايم</span><b>${money(x.ot)}</b></div><div><span>التأخير</span><b>${money(x.lateDed)}</b></div><div><span>الخصومات والجزاءات</span><b>${money(x.deduction+x.penalties)}</b></div><div><span>صافي المرتب</span><b>${money(x.net)}</b></div></div>
  <table><thead><tr><th>البند</th><th>القيمة</th><th>التفاصيل</th></tr></thead><tbody>
  <tr><td>المرتب الأساسي</td><td>${money(x.base)}</td><td>${e.cycle}</td></tr><tr><td>خصم التأخير</td><td>${money(x.lateDed)}</td><td>${x.late} دقيقة</td></tr><tr><td>الخصومات</td><td>${money(x.deduction)}</td><td>حسب الفترة</td></tr><tr><td>الجزاءات</td><td>${money(x.penalties)}</td><td>${adjustments.filter(a=>a.employeeId===e.id&&a.type==="جزاء"&&inRange(a.date,x.r)).map(a=>esc(a.reason||"بدون سبب")).join("، ")||"لا يوجد"}</td></tr><tr><td>الخصومات</td><td>${money(x.deduction)}</td><td>${adjustments.filter(a=>a.employeeId===e.id&&a.type!=="جزاء"&&inRange(a.date,x.r)).map(a=>esc(a.reason||"بدون سبب")).join("، ")||"لا يوجد"}</td></tr><tr><td>السلف</td><td>${money(x.loan)}</td><td>${loans.filter(a=>a.employeeId===e.id&&inRange(a.date,x.r)).map(a=>esc(a.reason||"بدون سبب")).join("، ")||"القسط/الخصم المحدد"}</td></tr><tr><td>الأوفر تايم</td><td>${money(x.ot)}</td><td>ساعات معتمدة</td></tr><tr><th>صافي المستحق</th><th>${money(x.net)}</th><th>بعد كل التسويات</th></tr>
- </tbody></table><p class="muted">تم إعداد هذا الكشف من بيانات النظام المحفوظة محلياً.</p></div>
+ </tbody></table><p class="muted">تم إعداد هذا الكشف من بيانات نظام المرتبات المتزامنة مع قاعدة البيانات السحابية.</p></div>
  <div style="display:flex;gap:8px;margin-top:10px"><button class="primary" id="printReport">طباعة / حفظ PDF</button><button class="secondary" id="jpgReport">تحميل JPG</button></div>`;
  $("#printReport").onclick=()=>printReport(x);
  $("#jpgReport").onclick=()=>downloadJPG(x);
@@ -158,9 +217,9 @@ function downloadJPG(x){
 function showPage(page){
  $$(".page").forEach(p=>p.classList.remove("active"));$("#"+page+"Page").classList.add("active");
  $$(".nav").forEach(n=>n.classList.toggle("active",n.dataset.page===page));
- const titles={dashboard:"لوحة المؤشرات",employees:"الموظفين",attendance:"الحضور والانصراف",payroll:"المرتبات",loans:"السلف",adjustments:"الخصومات والجزاءات",overtime:"الأوفر تايم",reports:"الكشوفات والتقارير",settings:"الإعدادات"};
+ const titles={dashboard:"لوحة المؤشرات",employees:"الموظفين",attendance:"الحضور والانصراف",payroll:"المرتبات",loans:"السلف",adjustments:"الخصومات والجزاءات",overtime:"الأوفر تايم",expenses:"مصروفات الفروع",reports:"الكشوفات والتقارير",settings:"الإعدادات"};
  $("#pageTitle").textContent=titles[page];$("#sidebar").classList.remove("open");
- if(page==="dashboard")renderDashboard();if(page==="employees")renderEmployees();if(page==="attendance")renderAttendance();if(page==="loans")renderLoans();if(page==="adjustments")renderAdjustments();if(page==="overtime")renderOvertime();if(page==="payroll")renderPayroll();if(page==="reports")renderReport();
+ if(page==="dashboard")renderDashboard();if(page==="expenses")renderExpenses();if(page==="employees")renderEmployees();if(page==="attendance")renderAttendance();if(page==="loans")renderLoans();if(page==="adjustments")renderAdjustments();if(page==="overtime")renderOvertime();if(page==="payroll")renderPayroll();if(page==="reports")renderReport();
 }
 function openModal(id){$("#"+id).classList.add("show")}
 function closeModal(id){$("#"+id).classList.remove("show")}
@@ -175,11 +234,20 @@ function openEmployee(id=null){
 }
 $("#loginForm").onsubmit=e=>{
  e.preventDefault();
- if(loginMode==="admin"){if($("#adminPassword").value!=="NOSA406050"){toast("كلمة المرور غير صحيحة");return}sessionStorage.setItem("paySession",JSON.stringify({role:"admin"}));$("#loginScreen").classList.add("hidden");$("#adminApp").classList.remove("hidden");showPage("dashboard")}
- else{let e=empByCode($("#loginEmployeeCode").value.trim());if(!e){toast("كود الموظف غير صحيح أو الموظف غير نشط");return}sessionEmployee=e;sessionStorage.setItem("paySession",JSON.stringify({role:"employee",employeeId:e.id}));$("#loginScreen").classList.add("hidden");$("#employeePortal").classList.remove("hidden");renderEmployeePortal()}
+ if(loginMode==="admin"){
+   if($("#adminPassword").value!=="NOSA406050"){toast("كلمة المرور غير صحيحة");return}
+   sessionStorage.setItem("paySession",JSON.stringify({role:"admin"}));$("#loginScreen").classList.add("hidden");$("#adminApp").classList.remove("hidden");showPage("dashboard");
+ }else if(loginMode==="branch"){
+   const code=$("#branchCode").value.trim(), branch=Object.keys(branchCodes).find(b=>branchCodes[b]&&branchCodes[b]===code);
+   if(!branch){toast("كود الفرع غير صحيح");return}
+   sessionBranch=branch;sessionStorage.setItem("paySession",JSON.stringify({role:"branch",branch}));$("#loginScreen").classList.add("hidden");$("#branchPortal").classList.remove("hidden");renderBranchPortal();
+ }else{
+   let e=empByCode($("#loginEmployeeCode").value.trim());if(!e){toast("كود الموظف غير صحيح أو الموظف غير نشط");return}
+   sessionEmployee=e;sessionStorage.setItem("paySession",JSON.stringify({role:"employee",employeeId:e.id}));$("#loginScreen").classList.add("hidden");$("#employeePortal").classList.remove("hidden");renderEmployeePortal();
+ }
 };
-$$(".login-tab").forEach(t=>t.onclick=()=>{loginMode=t.dataset.login;$$(".login-tab").forEach(x=>x.classList.remove("active"));t.classList.add("active");$("#employeeCodeWrap").classList.toggle("hidden",loginMode!=="employee");$("#adminPasswordWrap").classList.toggle("hidden",loginMode!=="admin")});
-$("#adminLogout").onclick=()=>{sessionStorage.removeItem("paySession");location.reload()};$("#employeeLogout").onclick=()=>{sessionStorage.removeItem("paySession");location.reload()};
+$$(".login-tab").forEach(t=>t.onclick=()=>{loginMode=t.dataset.login;$$(".login-tab").forEach(x=>x.classList.remove("active"));t.classList.add("active");$("#employeeCodeWrap").classList.toggle("hidden",loginMode!=="employee");$("#branchCodeWrap").classList.toggle("hidden",loginMode!=="branch");$("#adminPasswordWrap").classList.toggle("hidden",loginMode!=="admin")});
+$("#adminLogout").onclick=()=>{sessionStorage.removeItem("paySession");location.reload()};$("#employeeLogout").onclick=()=>{sessionStorage.removeItem("paySession");location.reload()};$("#branchLogout").onclick=()=>{sessionStorage.removeItem("paySession");location.reload()};
 $("#menuBtn").onclick=()=>$("#sidebar").classList.toggle("open");
 $$(".nav").forEach(n=>n.onclick=()=>showPage(n.dataset.page));$$("[data-go]").forEach(x=>x.onclick=()=>showPage(x.dataset.go));
 $("#dashboardRefresh").onclick=()=>{renderDashboard();toast("تم تحديث لوحة المؤشرات")};
@@ -202,10 +270,15 @@ $("#adjustmentsTable").onclick=e=>{let d=e.target.closest("[data-del-adj]");if(d
 $("#addOvertime").onclick=()=>{prepForms();$("#overtimeForm").reset();$("#oDate").value=today();$("#oRate").value=settings.ot;openModal("overtimeModal")};
 $("#overtimeForm").onsubmit=e=>{e.preventDefault();overtime.push({id:uid("o"),employeeId:$("#oEmployee").value,date:$("#oDate").value,hours:Number($("#oHours").value),rate:Number($("#oRate").value),reason:$("#oReason").value});save();closeModal("overtimeModal");renderOvertime();renderDashboard();toast("تم إضافة الأوفر تايم")};
 $("#overtimeTable").onclick=e=>{let d=e.target.closest("[data-del-ot]");if(d&&confirm("حذف الأوفر تايم؟")){overtime=overtime.filter(x=>x.id!==d.dataset.delOt);save();renderOvertime();renderDashboard()}};
+$("#branchExpenseForm").onsubmit=e=>{e.preventDefault();if(!sessionBranch)return;let amount=Number($("#beAmount").value);if(!(amount>0)){toast("أدخل مبلغ المصروف");return}expenses.push({id:uid("ex"),branch:sessionBranch,date:today(),type:$("#beType").value,amount,reason:$("#beReason").value.trim(),createdAt:Date.now()});save();$("#branchExpenseForm").reset();renderBranchPortal();toast("تم تسجيل المصروف وسماعه في لوحة الإدارة")};
+$("#expenseDate").value=today();$("#expenseDate").onchange=renderExpenses;$("#expenseBranchFilter").onchange=renderExpenses;
+$("#expensesTable").onclick=e=>{let d=e.target.closest("[data-del-exp]");if(d&&confirm("حذف هذا المصروف؟")){expenses=expenses.filter(x=>x.id!==d.dataset.delExp);save();renderExpenses();renderDashboard();toast("تم حذف المصروف")}};
+$("#clearDayExpenses").onclick=()=>{let d=$("#expenseDate").value||today(), b=$("#expenseBranchFilter").value||"all";let count=expenses.filter(x=>x.date===d&&(b==="all"||x.branch===b)).length;if(!count){toast("لا توجد مصروفات للتصفير");return}if(confirm(`سيتم حذف ${count} مصروف من ${b==="all"?"كل الفروع":b} بتاريخ ${fmtDate(d)}. هل أنت متأكد؟`)){expenses=expenses.filter(x=>!(x.date===d&&(b==="all"||x.branch===b)));save();renderExpenses();renderDashboard();toast("تم تصفير المصروفات المحددة")}};
+$("#saveBranchCodes").onclick=()=>{let h=$("#branchCodeHadayek").value.trim(),d=$("#branchCodeDawagen").value.trim();if(!h||!d){toast("أدخل كود الفرعين");return}if(h===d){toast("يجب أن يكون كود كل فرع مختلفاً");return}branchCodes={الحدايق:h,الدواجن:d};save();toast("تم حفظ أكواد دخول الفروع")};
 $("#payrollEnd").value=today();$("#payrollCycle").onchange=renderPayroll;$("#payrollEnd").onchange=renderPayroll;$("#calculatePayroll").onclick=()=>{renderPayroll();toast("تم حساب المرتبات حسب فترة القبض")};
 $("#payrollTable").onclick=e=>{let b=e.target.closest("[data-pay-report]");if(b){showPage("reports");$("#reportEmployee").value=b.dataset.payReport;$("#reportEnd").value=$("#payrollEnd").value;$("#reportCycle").value=$("#payrollCycle").value;renderReport()}};
 $("#reportEnd").value=today();$("#reportEmployee").onchange=renderReport;$("#reportEnd").onchange=renderReport;$("#reportCycle").onchange=renderReport;$("#generateReport").onclick=renderReport;$("#openReport").onclick=()=>{showPage("reports");renderReport()};
-$("#defaultStart").value=formatTimeArabic(settings.start);$("#defaultEnd").value=formatTimeArabic(settings.end);$("#defaultOT").value=settings.ot;$("#saveSettings").onclick=()=>{settings={start:normalizeTime($("#defaultStart").value)||settings.start,end:normalizeTime($("#defaultEnd").value)||settings.end,ot:Number($("#defaultOT").value)||0};save();toast("تم حفظ إعدادات الدوام");employees.forEach(e=>{if(!e.start)e.start=settings.start;if(!e.end)e.end=settings.end;if(!e.ot)e.ot=settings.ot});save()};
+$("#defaultStart").value=formatTimeArabic(settings.start);$("#defaultEnd").value=formatTimeArabic(settings.end);$("#branchCodeHadayek").value=branchCodes.الحدايق||"";$("#branchCodeDawagen").value=branchCodes.الدواجن||"";$("#defaultOT").value=settings.ot;$("#saveSettings").onclick=()=>{settings={start:normalizeTime($("#defaultStart").value)||settings.start,end:normalizeTime($("#defaultEnd").value)||settings.end,ot:Number($("#defaultOT").value)||0};save();toast("تم حفظ إعدادات الدوام");employees.forEach(e=>{if(!e.start)e.start=settings.start;if(!e.end)e.end=settings.end;if(!e.ot)e.ot=settings.ot});save()};
 $$("[data-close]").forEach(b=>b.onclick=()=>closeModal(b.dataset.close));$$(".modal-bg").forEach(m=>m.onclick=e=>{if(e.target===m)m.classList.remove("show")});
 function renderEmployeePortal(){
  let e=sessionEmployee, end=today(),x=calcPayroll(e,end,e.cycle),todayA=attendance.filter(a=>a.employeeId===e.id).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,8);
@@ -236,13 +309,22 @@ function employeePunch(type){
 }
 
 function clock(){let n=new Date();$("#liveClock").textContent=n.toLocaleTimeString("ar-EG",{hour12:false});$("#liveDate").textContent=n.toLocaleDateString("ar-EG",{weekday:"long",year:"numeric",month:"long",day:"numeric"});$("#todayLabel").textContent=n.toLocaleDateString("ar-EG",{day:"2-digit",month:"long",year:"numeric"})}
-setInterval(clock,1000);clock();prepForms();$("#payrollEnd").value=today();$("#reportEnd").value=today();
+setInterval(clock,1000);clock();prepForms();$("#branchExpenseForm").onsubmit=e=>{e.preventDefault();if(!sessionBranch)return;let amount=Number($("#beAmount").value);if(!(amount>0)){toast("أدخل مبلغ المصروف");return}expenses.push({id:uid("ex"),branch:sessionBranch,date:today(),type:$("#beType").value,amount,reason:$("#beReason").value.trim(),createdAt:Date.now()});save();$("#branchExpenseForm").reset();renderBranchPortal();toast("تم تسجيل المصروف وسماعه في لوحة الإدارة")};
+$("#expenseDate").value=today();$("#expenseDate").onchange=renderExpenses;$("#expenseBranchFilter").onchange=renderExpenses;
+$("#expensesTable").onclick=e=>{let d=e.target.closest("[data-del-exp]");if(d&&confirm("حذف هذا المصروف؟")){expenses=expenses.filter(x=>x.id!==d.dataset.delExp);save();renderExpenses();renderDashboard();toast("تم حذف المصروف")}};
+$("#clearDayExpenses").onclick=()=>{let d=$("#expenseDate").value||today(), b=$("#expenseBranchFilter").value||"all";let count=expenses.filter(x=>x.date===d&&(b==="all"||x.branch===b)).length;if(!count){toast("لا توجد مصروفات للتصفير");return}if(confirm(`سيتم حذف ${count} مصروف من ${b==="all"?"كل الفروع":b} بتاريخ ${fmtDate(d)}. هل أنت متأكد؟`)){expenses=expenses.filter(x=>!(x.date===d&&(b==="all"||x.branch===b)));save();renderExpenses();renderDashboard();toast("تم تصفير المصروفات المحددة")}};
+$("#saveBranchCodes").onclick=()=>{let h=$("#branchCodeHadayek").value.trim(),d=$("#branchCodeDawagen").value.trim();if(!h||!d){toast("أدخل كود الفرعين");return}if(h===d){toast("يجب أن يكون كود كل فرع مختلفاً");return}branchCodes={الحدايق:h,الدواجن:d};save();toast("تم حفظ أكواد دخول الفروع")};
+$("#payrollEnd").value=today();$("#reportEnd").value=today();
 function restoreSession(){
   if(!savedSession) return;
   if(savedSession.role==="admin"){
     $("#loginScreen").classList.add("hidden");
     $("#adminApp").classList.remove("hidden");
     showPage("dashboard");
+  }else if(savedSession.role==="branch"){
+    if(savedSession.branch && branchCodes[savedSession.branch]){
+      sessionBranch=savedSession.branch;$("#loginScreen").classList.add("hidden");$("#branchPortal").classList.remove("hidden");renderBranchPortal();
+    }else sessionStorage.removeItem("paySession");
   }else if(savedSession.role==="employee"){
     const e=emp(savedSession.employeeId);
     if(e && e.active){
@@ -253,5 +335,6 @@ function restoreSession(){
     }else sessionStorage.removeItem("paySession");
   }
 }
+initCloud();
 renderDashboard();
 restoreSession();
