@@ -1,28 +1,168 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>نظام إدارة صالون نوسا - سحابي</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- مكتبة html2canvas لحفظ الكشوفات كصور -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    
-    <!-- Firebase App (Modular CDN) -->
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <!-- Firebase Realtime Database -->
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
-
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
-    <style>
-        body { font-family: 'Cairo', sans-serif; background-color: #fcf8fa; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>نظام مرتبات الموظفين</title>
+<link rel="stylesheet" href="style.css">
 </head>
-<body class="min-h-screen flex flex-col">
+<body>
+<div id="loginScreen" class="login-screen">
+  <div class="login-card">
+    <div class="logo">ن</div>
+    <h1>مرتبات صالونات نوسة</h1>
+    <p>إدارة الموظفين والحضور والمرتبات — الحدايق والدواجن</p>
+    <div class="login-tabs">
+      <button class="login-tab active" data-login="admin">الإدارة</button>
+      <button class="login-tab" data-login="employee">الموظف</button>
+    </div>
+    <form id="loginForm">
+      <label id="employeeCodeWrap" class="hidden">كود الموظف
+        <input id="loginEmployeeCode" placeholder="أدخل كود الموظف" type="password" inputmode="numeric" autocomplete="off">
+      </label>
+      <label id="adminPasswordWrap">كلمة مرور الإدارة
+        <input id="adminPassword" type="password" placeholder="أدخل كلمة مرور الإدارة" autocomplete="current-password">
+      </label>
+      <button class="primary wide" type="submit">دخول النظام</button>
+    </form>
+    <small>الدخول للإدارة محمي بكلمة مرور.</small>
+  </div>
+</div>
 
-    <div id="app" class="flex-1 flex flex-col"></div>
+<div id="employeePortal" class="employee-portal hidden">
+  <header class="employee-top">
+    <div><b>بوابة الموظف</b><span id="empWelcome"></span></div>
+    <button class="ghost" id="employeeLogout">تسجيل خروج</button>
+  </header>
+  <main class="employee-main">
+    <div class="employee-hero">
+      <div><span>مرحباً بك</span><h2 id="empName"></h2><p id="empBranch"></p></div>
+      <div class="emp-code hidden" id="empCode"></div>
+    </div>
+    <div class="employee-clock"><span id="liveClock">--:--:--</span><small id="liveDate"></small></div>
+    <div class="punch-grid">
+      <button class="punch in" id="punchIn">تسجيل حضور <small>بصمة دخول</small></button>
+      <button class="punch out" id="punchOut">تسجيل انصراف <small>بصمة خروج</small></button>
+    </div>
+    <div class="employee-cards">
+      <div class="mini-card"><span>نظام القبض</span><b id="empPayCycle"></b></div>
+      <div class="mini-card"><span>المرتب الأساسي</span><b id="empSalary"></b></div>
+      <div class="mini-card"><span>السلف</span><b id="empLoans"></b></div>
+      <div class="mini-card"><span>صافي الفترة</span><b id="empNet"></b></div>
+    </div>
+    <div class="panel"><div class="panel-title"><h3>آخر الحركات</h3></div><div id="empAttendanceList"></div></div>
+    <div class="panel"><div class="panel-title"><h3>مستحقات وخصومات الفترة</h3></div><div id="empPayrollDetails"></div></div>
+  </main>
+</div>
 
-    <script src="script.js"></script>
+<div id="adminApp" class="app hidden">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand"><div class="brand-icon">ن</div><div><b>صالونات نوسة</b><small>إدارة المرتبات والموظفين</small></div></div>
+    <nav>
+      <button class="nav active" data-page="dashboard"><i>⌂</i>لوحة المؤشرات</button>
+      <button class="nav" data-page="employees"><i>♙</i>الموظفين</button>
+      <button class="nav" data-page="attendance"><i>◷</i>الحضور والانصراف</button>
+      <button class="nav" data-page="payroll"><i>▤</i>المرتبات</button>
+      <button class="nav" data-page="loans"><i>₽</i>السلف</button>
+      <button class="nav" data-page="adjustments"><i>−</i>الخصومات والجزاءات</button>
+      <button class="nav" data-page="overtime"><i>＋</i>الأوفر تايم</button>
+      <button class="nav" data-page="reports"><i>▥</i>الكشوفات والتقارير</button>
+      <button class="nav" data-page="settings"><i>⚙</i>الإعدادات</button>
+    </nav>
+    <div class="side-bottom"><span>فرع الحدايق + فرع الدواجن</span><button id="adminLogout">تسجيل خروج</button></div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <button class="menu" id="menuBtn">☰</button>
+      <div><span class="muted">لوحة الإدارة</span><h2 id="pageTitle">لوحة المؤشرات</h2></div>
+      <div class="top-actions"><span class="date-pill" id="todayLabel"></span><div class="avatar">م</div></div>
+    </header>
+
+    <div class="content">
+      <section class="page active" id="dashboardPage">
+        <div class="page-head"><div><span class="muted">نظرة سريعة</span><h1>لوحة المؤشرات</h1></div><button class="primary" id="dashboardRefresh">تحديث البيانات</button></div>
+        <div class="stats">
+          <div class="stat"><div class="stat-icon blue">♙</div><span>إجمالي الموظفين</span><b id="dEmployees">0</b><small>كل الفروع</small></div>
+          <div class="stat"><div class="stat-icon green">✓</div><span>حضور اليوم</span><b id="dPresent">0</b><small id="dPresentPct">0%</small></div>
+          <div class="stat"><div class="stat-icon orange">!</div><span>متأخرون اليوم</span><b id="dLate">0</b><small>يحتاج متابعة</small></div>
+          <div class="stat"><div class="stat-icon purple">◷</div><span>إجمالي الأوفر تايم</span><b id="dOvertime">0</b><small>ساعة</small></div>
+          <div class="stat"><div class="stat-icon red">−</div><span>خصومات الفترة</span><b id="dDeductions">0</b><small>جنيه</small></div>
+          <div class="stat"><div class="stat-icon teal">₽</div><span>السلف القائمة</span><b id="dLoans">0</b><small>جنيه</small></div>
+        </div>
+        <div class="dashboard-grid">
+          <div class="panel"><div class="panel-title"><h3>الحضور حسب الفرع</h3><span>اليوم</span></div><div id="branchBars"></div></div>
+          <div class="panel"><div class="panel-title"><h3>تنبيهات الإدارة</h3></div><div id="alerts"></div></div>
+        </div>
+        <div class="panel"><div class="panel-title"><h3>آخر الحركات</h3><div class="panel-head-actions"><button class="link-btn" data-go="attendance">عرض الكل</button><button class="link-btn danger-link" id="clearRecentActivity">حذف آخر الحركات</button></div></div><div id="recentActivity"></div></div>
+      </section>
+
+      <section class="page" id="employeesPage">
+        <div class="page-head"><div><span class="muted">إدارة الفريق</span><h1>الموظفين</h1></div><button class="primary" id="addEmployee">＋ إضافة موظف</button></div>
+        <div class="filters"><input id="employeeSearch" placeholder="بحث بالاسم أو الكود..."><select id="employeeBranchFilter"><option value="all">كل الفروع</option><option>الحدايق</option><option>الدواجن</option></select><select id="employeeCycleFilter"><option value="all">كل أنظمة القبض</option><option value="أسبوعي">أسبوعي</option><option value="15 يوم">كل 15 يوم</option><option value="شهري">شهري</option></select></div>
+        <div class="table-wrap"><table><thead><tr><th>الموظف</th><th>الكود</th><th>الفرع</th><th>المرتب</th><th>القبض</th><th>ميعاد العمل</th><th>الحالة</th><th>إجراءات</th></tr></thead><tbody id="employeesTable"></tbody></table></div>
+      </section>
+
+      <section class="page" id="attendancePage">
+        <div class="page-head"><div><span class="muted">تسجيل ومراجعة</span><h1>الحضور والانصراف</h1></div><button class="primary" id="addAttendance">＋ تسجيل / تعديل حضور</button></div>
+        <div class="filters"><input id="attDate" type="date"><select id="attBranch"><option value="all">كل الفروع</option><option>الحدايق</option><option>الدواجن</option></select><select id="attStatus"><option value="all">كل الحالات</option><option value="present">حاضر</option><option value="late">متأخر</option><option value="absent">غائب</option></select></div>
+        <div class="info-box">يمكن للإدارة تعديل وقت الدخول أو الانصراف بعد مراجعة الكاميرات، وسيتم استخدام الوقت المعدل في حساب المرتب تلقائياً.</div>
+        <div class="table-wrap"><table><thead><tr><th>التاريخ</th><th>الموظف</th><th>الفرع</th><th>الدخول</th><th>الانصراف</th><th>التأخير</th><th>قيمة خصم التأخير</th><th>الوقت الإضافي</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody id="attendanceTable"></tbody></table></div>
+      </section>
+
+      <section class="page" id="payrollPage">
+        <div class="page-head"><div><span class="muted">حساب المستحقات</span><h1>المرتبات</h1></div><div class="head-actions"><select id="payrollCycle"><option value="أسبوعي">أسبوعي</option><option value="15 يوم">كل 15 يوم</option><option value="شهري" selected>شهري</option></select><input id="payrollEnd" type="date"><button class="primary" id="calculatePayroll">حساب المرتبات</button></div></div>
+        <div class="info-box">الخصومات والسلف والتأخير تُحسب داخل فترة القبض المختارة فقط. الأوفر تايم المضاف من الإدارة يدخل ضمن المستحقات.</div>
+        <div class="payroll-summary" id="payrollSummary"></div>
+        <div class="table-wrap"><table><thead><tr><th>الموظف</th><th>الأساسي للفترة</th><th>تأخير</th><th>خصومات</th><th>جزاءات</th><th>سلف</th><th>أوفر تايم</th><th>صافي المرتب</th><th>كشف</th></tr></thead><tbody id="payrollTable"></tbody></table></div>
+      </section>
+
+      <section class="page" id="loansPage">
+        <div class="page-head"><div><span class="muted">المبالغ المقدمة</span><h1>السلف</h1></div><button class="primary" id="addLoan">＋ إضافة سلفة</button></div>
+        <div class="table-wrap"><table><thead><tr><th>التاريخ</th><th>الموظف</th><th>المبلغ</th><th>الخصم في الفترة</th><th>السبب</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody id="loansTable"></tbody></table></div>
+      </section>
+
+      <section class="page" id="adjustmentsPage">
+        <div class="page-head"><div><span class="muted">الجزاءات والخصومات</span><h1>الخصومات والجزاءات</h1></div><button class="primary" id="addAdjustment">＋ إضافة خصم / جزاء</button></div>
+        <div class="table-wrap"><table><thead><tr><th>التاريخ</th><th>الموظف</th><th>النوع</th><th>المبلغ</th><th>السبب</th><th>الفترة</th><th>إجراء</th></tr></thead><tbody id="adjustmentsTable"></tbody></table></div>
+      </section>
+
+      <section class="page" id="overtimePage">
+        <div class="page-head"><div><span class="muted">المستحقات الإضافية</span><h1>الأوفر تايم</h1></div><button class="primary" id="addOvertime">＋ إضافة أوفر تايم</button></div>
+        <div class="info-box">الأوفر تايم هنا يتم إدخاله واعتماده من الإدارة، ويمكن تحديد عدد الساعات أو القيمة مباشرة.</div>
+        <div class="table-wrap"><table><thead><tr><th>التاريخ</th><th>الموظف</th><th>الساعات</th><th>قيمة الساعة</th><th>الإجمالي</th><th>السبب</th><th>إجراء</th></tr></thead><tbody id="overtimeTable"></tbody></table></div>
+      </section>
+
+      <section class="page" id="reportsPage">
+        <div class="page-head"><div><span class="muted">طباعة وحفظ</span><h1>الكشوفات والتقارير</h1></div><button class="primary" id="openReport">إنشاء كشف مرتبات</button></div>
+        <div class="report-tools panel"><div><label>الموظف<select id="reportEmployee"></select></label><label>نهاية الفترة<input id="reportEnd" type="date"></label><label>نظام القبض<select id="reportCycle"><option>أسبوعي</option><option>15 يوم</option><option selected>شهري</option></select></label><button class="primary" id="generateReport">عرض الكشف</button></div></div>
+        <div id="reportPreview" class="report-preview"></div>
+      </section>
+
+      <section class="page" id="settingsPage">
+        <div class="page-head"><div><span class="muted">إعدادات النظام</span><h1>الإعدادات</h1></div></div>
+        <div class="settings-grid">
+          <div class="panel"><h3>إعدادات العمل الافتراضية</h3><label>بداية الدوام<input id="defaultStart" type="text" inputmode="numeric" placeholder="مثال: 11:30 صباحًا"></label><label>نهاية الدوام<input id="defaultEnd" type="text" inputmode="numeric" placeholder="مثال: 11:30 صباحًا"></label><label>سعر ساعة الأوفر تايم<input id="defaultOT" type="number"></label><button class="primary" id="saveSettings">حفظ الإعدادات</button></div>
+          <div class="panel"><h3>فترات القبض</h3><p class="muted">النظام يحسب المرتب داخل فترة الموظف فقط، ولا يخلط خصومات شهر كامل مع موظف قبضه كل 15 يوم.</p><div class="rule"><b>أسبوعي</b><span>آخر 7 أيام من تاريخ نهاية الفترة</span></div><div class="rule"><b>15 يوم</b><span>آخر 15 يوماً من تاريخ نهاية الفترة</span></div><div class="rule"><b>شهري</b><span>الشهر الميلادي الذي يحتوي تاريخ النهاية</span></div></div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<!-- Modals -->
+<div class="modal-bg" id="employeeModal"><div class="modal"><div class="modal-head"><h2 id="employeeModalTitle">إضافة موظف</h2><button class="close" data-close="employeeModal">×</button></div><form id="employeeForm"><input type="hidden" id="eId"><div class="form-grid"><label>اسم الموظف *<input id="eName" required></label><label>كود البصمة *<input id="eCode" type="password" inputmode="numeric" autocomplete="new-password" placeholder="أدخل كود البصمة"></label><label>الفرع<select id="eBranch"><option>الحدايق</option><option>الدواجن</option></select></label><label>المرتب الأساسي<input id="eSalary" type="number" min="0" required></label><label>نظام القبض<select id="eCycle"><option>أسبوعي</option><option>15 يوم</option><option>شهري</option></select></label><label>بداية الدوام<input id="eStart" type="text" inputmode="numeric" placeholder="مثال: 11:30 صباحًا"></label><label>نهاية الدوام<input id="eEnd" type="text" inputmode="numeric" placeholder="مثال: 11:30 صباحًا"></label><label>سعر ساعة الأوفر تايم<input id="eOT" type="number" min="0"></label><label class="check"><input id="eActive" type="checkbox" checked> موظف نشط</label></div><div class="modal-actions"><button type="button" class="secondary" data-close="employeeModal">إلغاء</button><button class="primary">حفظ الموظف</button></div></form></div></div>
+
+<div class="modal-bg" id="attendanceModal"><div class="modal"><div class="modal-head"><h2>تسجيل / تصحيح حضور</h2><button class="close" data-close="attendanceModal">×</button></div><form id="attendanceForm"><input type="hidden" id="aId"><div class="form-grid"><label>الموظف<select id="aEmployee"></select></label><label>التاريخ<input id="aDate" type="date" required></label><label>وقت الدخول الصحيح<input id="aIn" type="text" inputmode="numeric" placeholder="مثال: 11:30 صباحًا"></label><label>وقت الانصراف الصحيح<input id="aOut" type="text" inputmode="numeric" placeholder="مثال: 11:30 صباحًا"></label><label>ملاحظة المراجعة<input id="aNote" placeholder="مثال: تم التصحيح طبقاً للكاميرات"></label></div><div class="modal-actions"><button type="button" class="secondary" data-close="attendanceModal">إلغاء</button><button class="primary">حفظ الحضور</button></div></form></div></div>
+
+<div class="modal-bg" id="loanModal"><div class="modal"><div class="modal-head"><h2>إضافة سلفة</h2><button class="close" data-close="loanModal">×</button></div><form id="loanForm"><div class="form-grid"><label>الموظف<select id="lEmployee"></select></label><label>التاريخ<input id="lDate" type="date" required></label><label>قيمة السلفة<input id="lAmount" type="number" min="0" required></label><label>الخصم في الفترة<input id="lDeduct" type="number" min="0" required></label><label class="full">السبب<input id="lReason"></label></div><div class="modal-actions"><button type="button" class="secondary" data-close="loanModal">إلغاء</button><button class="primary">حفظ السلفة</button></div></form></div></div>
+
+<div class="modal-bg" id="adjustmentModal"><div class="modal"><div class="modal-head"><h2>إضافة خصم / جزاء</h2><button class="close" data-close="adjustmentModal">×</button></div><form id="adjustmentForm"><div class="form-grid"><label>الموظف<select id="xEmployee"></select></label><label>التاريخ<input id="xDate" type="date" required></label><label>النوع<select id="xType"><option>خصم</option><option>جزاء</option><option>غياب</option><option>أخرى</option></select></label><label>المبلغ<input id="xAmount" type="number" min="0" required></label><label class="full">السبب<input id="xReason"></label></div><div class="modal-actions"><button type="button" class="secondary" data-close="adjustmentModal">إلغاء</button><button class="primary">حفظ</button></div></form></div></div>
+
+<div class="modal-bg" id="overtimeModal"><div class="modal"><div class="modal-head"><h2>إضافة أوفر تايم</h2><button class="close" data-close="overtimeModal">×</button></div><form id="overtimeForm"><div class="form-grid"><label>الموظف<select id="oEmployee"></select></label><label>التاريخ<input id="oDate" type="date" required></label><label>عدد الساعات<input id="oHours" type="number" min="0" step=".25" required></label><label>قيمة الساعة<input id="oRate" type="number" min="0" required></label><label class="full">السبب<input id="oReason"></label></div><div class="modal-actions"><button type="button" class="secondary" data-close="overtimeModal">إلغاء</button><button class="primary">حفظ</button></div></form></div></div>
+
+<div id="printArea" class="print-area"></div>
+<div class="toast" id="toast"></div>
+<script src="script.js"></script>
 </body>
 </html>
