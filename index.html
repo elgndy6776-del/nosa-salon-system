@@ -15,10 +15,14 @@
     <div class="login-tabs">
       <button class="login-tab active" data-login="admin">الإدارة</button>
       <button class="login-tab" data-login="employee">الموظف</button>
+      <button class="login-tab" data-login="branch">الفرع</button>
     </div>
     <form id="loginForm">
       <label id="employeeCodeWrap" class="hidden">كود الموظف
         <input id="loginEmployeeCode" placeholder="أدخل كود الموظف" type="password" inputmode="numeric" autocomplete="off">
+      </label>
+      <label id="branchCodeWrap" class="hidden">كود الفرع
+        <input id="branchCode" type="password" placeholder="أدخل كود الفرع" autocomplete="off">
       </label>
       <label id="adminPasswordWrap">كلمة مرور الإدارة
         <input id="adminPassword" type="password" placeholder="أدخل كلمة مرور الإدارة" autocomplete="current-password">
@@ -55,6 +59,28 @@
   </main>
 </div>
 
+<div id="branchPortal" class="employee-portal hidden">
+  <header class="employee-top">
+    <div><b id="branchPortalTitle">بوابة الفرع</b><span>تسجيل ومتابعة المصروفات</span></div>
+    <button class="ghost" id="branchLogout">تسجيل خروج</button>
+  </header>
+  <main class="employee-main">
+    <div class="employee-hero"><div><span>الفرع</span><h2 id="branchName"></h2><p>أدخل مصروفات اليوم ليتم تسجيلها فوراً في لوحة الإدارة.</p></div></div>
+    <div class="panel">
+      <div class="panel-title"><h3>إضافة مصروف</h3><span id="branchTodayTotal">0 ج.م اليوم</span></div>
+      <form id="branchExpenseForm">
+        <div class="form-grid">
+          <label>نوع المصروف<select id="beType"><option>زبالة</option><option>كهرباء</option><option>مياه</option><option>نظافة</option><option>صيانة</option><option>مشتريات</option><option>مواصلات</option><option>رواتب / أجور أخرى</option><option>أخرى</option></select></label>
+          <label>المبلغ<input id="beAmount" type="number" min="0" step=".01" required></label>
+          <label class="full">البيان / السبب<input id="beReason" placeholder="مثال: فاتورة كهرباء الشهر"></label>
+          <button class="primary" type="submit">＋ تسجيل المصروف</button>
+        </div>
+      </form>
+    </div>
+    <div class="panel"><div class="panel-title"><h3>مصروفات اليوم</h3></div><div id="branchExpenseList"></div></div>
+  </main>
+</div>
+
 <div id="adminApp" class="app hidden">
   <aside class="sidebar" id="sidebar">
     <div class="brand"><div class="brand-icon">ن</div><div><b>صالونات نوسة</b><small>إدارة المرتبات والموظفين</small></div></div>
@@ -66,6 +92,7 @@
       <button class="nav" data-page="loans"><i>₽</i>السلف</button>
       <button class="nav" data-page="adjustments"><i>−</i>الخصومات والجزاءات</button>
       <button class="nav" data-page="overtime"><i>＋</i>الأوفر تايم</button>
+      <button class="nav" data-page="expenses"><i>▣</i>مصروفات الفروع</button>
       <button class="nav" data-page="reports"><i>▥</i>الكشوفات والتقارير</button>
       <button class="nav" data-page="settings"><i>⚙</i>الإعدادات</button>
     </nav>
@@ -89,6 +116,7 @@
           <div class="stat"><div class="stat-icon purple">◷</div><span>إجمالي الأوفر تايم</span><b id="dOvertime">0</b><small>ساعة</small></div>
           <div class="stat"><div class="stat-icon red">−</div><span>خصومات الفترة</span><b id="dDeductions">0</b><small>جنيه</small></div>
           <div class="stat"><div class="stat-icon teal">₽</div><span>السلف القائمة</span><b id="dLoans">0</b><small>جنيه</small></div>
+          <div class="stat"><div class="stat-icon red">▣</div><span>مصروفات اليوم</span><b id="dExpenses">0</b><small>جنيه — كل الفروع</small></div>
         </div>
         <div class="dashboard-grid">
           <div class="panel"><div class="panel-title"><h3>الحضور حسب الفرع</h3><span>اليوم</span></div><div id="branchBars"></div></div>
@@ -133,6 +161,15 @@
         <div class="table-wrap"><table><thead><tr><th>التاريخ</th><th>الموظف</th><th>الساعات</th><th>قيمة الساعة</th><th>الإجمالي</th><th>السبب</th><th>إجراء</th></tr></thead><tbody id="overtimeTable"></tbody></table></div>
       </section>
 
+      <section class="page" id="expensesPage">
+        <div class="page-head"><div><span class="muted">مصروفات التشغيل</span><h1>مصروفات الفروع</h1></div><div class="head-actions"><input id="expenseDate" type="date"><select id="expenseBranchFilter"><option value="all">كل الفروع</option><option>الحدايق</option><option>الدواجن</option></select><button class="primary" id="clearDayExpenses">تصفير مصروفات اليوم</button></div></div>
+        <div class="dashboard-grid">
+          <div class="panel"><div class="panel-title"><h3>إجمالي مصروفات الحدايق</h3><b id="expHadayekTotal">0 ج.م</b></div><div id="expHadayekBreakdown"></div></div>
+          <div class="panel"><div class="panel-title"><h3>إجمالي مصروفات الدواجن</h3><b id="expDawagenTotal">0 ج.م</b></div><div id="expDawagenBreakdown"></div></div>
+        </div>
+        <div class="table-wrap"><table><thead><tr><th>التاريخ</th><th>الفرع</th><th>النوع</th><th>المبلغ</th><th>البيان</th><th>الإجراء</th></tr></thead><tbody id="expensesTable"></tbody></table></div>
+      </section>
+
       <section class="page" id="reportsPage">
         <div class="page-head"><div><span class="muted">طباعة وحفظ</span><h1>الكشوفات والتقارير</h1></div><button class="primary" id="openReport">إنشاء كشف مرتبات</button></div>
         <div class="report-tools panel"><div><label>الموظف<select id="reportEmployee"></select></label><label>نهاية الفترة<input id="reportEnd" type="date"></label><label>نظام القبض<select id="reportCycle"><option>أسبوعي</option><option>15 يوم</option><option selected>شهري</option></select></label><button class="primary" id="generateReport">عرض الكشف</button></div></div>
@@ -142,7 +179,15 @@
       <section class="page" id="settingsPage">
         <div class="page-head"><div><span class="muted">إعدادات النظام</span><h1>الإعدادات</h1></div></div>
         <div class="settings-grid">
+          <div class="panel"><h3>أكواد دخول الفروع</h3><p class="muted">أنت فقط تحدد كود الدخول لكل فرع. لا تستخدم نفس كود الإدارة.</p>
+            <div class="form-grid">
+              <label>كود فرع الحدايق<input id="branchCodeHadayek" type="text" inputmode="numeric" autocomplete="off"></label>
+              <label>كود فرع الدواجن<input id="branchCodeDawagen" type="text" inputmode="numeric" autocomplete="off"></label>
+            </div>
+            <div class="modal-actions"><button class="primary" id="saveBranchCodes" type="button">حفظ أكواد الفروع</button></div>
+          </div>
           <div class="panel"><h3>إعدادات العمل الافتراضية</h3><label>بداية الدوام<input id="defaultStart" type="text" inputmode="numeric" placeholder="مثال: 11:30 صباحًا"></label><label>نهاية الدوام<input id="defaultEnd" type="text" inputmode="numeric" placeholder="مثال: 11:30 صباحًا"></label><label>سعر ساعة الأوفر تايم<input id="defaultOT" type="number"></label><button class="primary" id="saveSettings">حفظ الإعدادات</button></div>
+          <div class="panel"><h3>قاعدة البيانات السحابية</h3><p class="muted">البيانات تتزامن تلقائياً مع Firebase Realtime Database بين الأجهزة عند توفر الإنترنت.</p><div class="rule"><b>المسار</b><span>nosaPayroll/state</span></div><div class="rule"><b>المهم</b><span>اضبط قواعد Realtime Database من Firebase Console لحماية البيانات.</span></div></div>
           <div class="panel"><h3>فترات القبض</h3><p class="muted">النظام يحسب المرتب داخل فترة الموظف فقط، ولا يخلط خصومات شهر كامل مع موظف قبضه كل 15 يوم.</p><div class="rule"><b>أسبوعي</b><span>آخر 7 أيام من تاريخ نهاية الفترة</span></div><div class="rule"><b>15 يوم</b><span>آخر 15 يوماً من تاريخ نهاية الفترة</span></div><div class="rule"><b>شهري</b><span>الشهر الميلادي الذي يحتوي تاريخ النهاية</span></div></div>
         </div>
       </section>
@@ -163,6 +208,23 @@
 
 <div id="printArea" class="print-area"></div>
 <div class="toast" id="toast"></div>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyAB2QCgySeHybSyMfMUB1hbAJz",
+    databaseURL: "https://payroll-system-4b7f9-default-rtdb.firebaseio.com",
+    authDomain: "payroll-system-4b7f9.firebaseapp.com",
+    projectId: "payroll-system-4b7f9",
+    storageBucket: "payroll-system-4b7f9.firebasestorage.app",
+    messagingSenderId: "95157845773",
+    appId: "1:95157845773:web:27e3054d5e9ba9b5a13a44"
+  };
+  // Realtime Database URL is inferred when possible; if your Firebase console shows a specific
+  // database URL, set it here (e.g. https://payroll-system-4b7f9-default-rtdb.firebaseio.com).
+  const firebaseApp = firebase.initializeApp(firebaseConfig);
+  window.nosaDB = firebase.database(firebaseApp);
+</script>
 <script src="script.js"></script>
 </body>
 </html>
