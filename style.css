@@ -293,3 +293,20 @@ table{min-width:1000px}th{font-size:13px;padding:14px}td{font-size:13px;padding:
 
 /* عرض كود الموظف للمدير فقط داخل لوحة الإدارة */
 .employee-code-cell{display:flex;align-items:center;gap:7px;direction:rtl;white-space:nowrap}.employee-code-value{font-family:monospace;font-size:15px;letter-spacing:1px}.employee-code-cell .mini-btn{padding:5px 9px}
+
+
+/* ===== إضافات الإجازات وسجل الحضور التاريخي ===== */
+.leave-note{color:var(--green);font-size:10px}
+.leave-inline{color:var(--green);font-weight:700;margin-right:5px}
+.leave-section{margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
+.leave-section h4{margin:0 0 7px;font-size:12px;color:var(--primary)}
+.leave-no-deduction{margin-top:12px;margin-bottom:0;background:#eefaf4;border-color:#d9f0e4;color:#3e8063}
+.badge.purple{background:#f3edff;color:var(--purple)}
+@media(max-width:800px){
+  .activity{grid-template-columns:1fr 1fr}
+}
+
+.admin-attendance-note{display:block;color:var(--primary);font-size:10px;margin-top:3px;font-weight:700}
+
+.movement-list{display:flex;flex-direction:column;gap:4px;margin:3px 0}
+.movement-entry{display:block}
