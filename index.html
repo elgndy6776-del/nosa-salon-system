@@ -88,6 +88,7 @@
       <button class="nav active" data-page="dashboard"><i>⌂</i>لوحة المؤشرات</button>
       <button class="nav" data-page="employees"><i>♙</i>الموظفين</button>
       <button class="nav" data-page="attendance"><i>◷</i>الحضور والانصراف</button>
+      <button class="nav" data-page="leaves"><i>☘</i>الإجازات</button>
       <button class="nav" data-page="payroll"><i>▤</i>المرتبات</button>
       <button class="nav" data-page="loans"><i>₽</i>السلف</button>
       <button class="nav" data-page="adjustments"><i>−</i>الخصومات والجزاءات</button>
@@ -138,8 +139,31 @@
         <div class="table-wrap"><table><thead><tr><th>التاريخ</th><th>الموظف</th><th>الفرع</th><th>الدخول</th><th>الانصراف</th><th>التأخير</th><th>قيمة خصم التأخير</th><th>الوقت الإضافي</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody id="attendanceTable"></tbody></table></div>
       </section>
 
+
+      <section class="page" id="leavesPage">
+        <div class="page-head">
+          <div><span class="muted">إدارة الإجازات</span><h1>إجازات الموظفين</h1></div>
+          <button class="primary" id="addLeave">＋ إضافة إجازة</button>
+        </div>
+        <div class="info-box">الإجازة تُسجل من لوحة الإدارة فقط، وتظهر للموظفة في بوابتها، ولا تُخصم من المرتب الأساسي.</div>
+        <div class="filters">
+          <input id="leaveDateFilter" type="date">
+          <select id="leaveEmployeeFilter"><option value="all">كل الموظفات</option></select>
+          <select id="leaveStatusFilter">
+            <option value="all">كل الحالات</option>
+            <option value="approved">معتمدة</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>من</th><th>إلى</th><th>الموظفة</th><th>الفرع</th><th>النوع</th><th>السبب</th><th>الحالة</th><th>إجراء</th></tr></thead>
+            <tbody id="leavesTable"></tbody>
+          </table>
+        </div>
+      </section>
+
       <section class="page" id="payrollPage">
-        <div class="page-head"><div><span class="muted">حساب المستحقات</span><h1>المرتبات</h1></div><div class="head-actions"><select id="payrollCycle"><option value="أسبوعي">أسبوعي</option><option value="15 يوم">كل 15 يوم</option><option value="شهري" selected>شهري</option></select><input id="payrollEnd" type="date"><button class="primary" id="calculatePayroll">حساب المرتبات</button></div></div>
+        <div class="page-head"><div><span class="muted">حساب المستحقات</span><h1>المرتبات</h1></div><div class="head-actions"><select id="payrollCycle"><option value="all" selected>كل الموظفات</option><option value="أسبوعي">أسبوعي</option><option value="15 يوم">كل 15 يوم</option><option value="شهري">شهري</option></select><input id="payrollEnd" type="date"><button class="primary" id="calculatePayroll">حساب المرتبات</button></div></div>
         <div class="info-box">الخصومات والسلف والتأخير تُحسب داخل فترة القبض المختارة فقط. الأوفر تايم المضاف من الإدارة يدخل ضمن المستحقات.</div>
         <div class="payroll-summary" id="payrollSummary"></div>
         <div class="table-wrap"><table><thead><tr><th>الموظف</th><th>الأساسي للفترة</th><th>تأخير</th><th>خصومات</th><th>جزاءات</th><th>سلف</th><th>أوفر تايم</th><th>صافي المرتب</th><th>كشف</th></tr></thead><tbody id="payrollTable"></tbody></table></div>
@@ -206,6 +230,26 @@
 
 <div class="modal-bg" id="overtimeModal"><div class="modal"><div class="modal-head"><h2>إضافة أوفر تايم</h2><button class="close" data-close="overtimeModal">×</button></div><form id="overtimeForm"><div class="form-grid"><label>الموظف<select id="oEmployee"></select></label><label>التاريخ<input id="oDate" type="date" required></label><label>عدد الساعات<input id="oHours" type="number" min="0" step=".25" required></label><label>قيمة الساعة<input id="oRate" type="number" min="0" required></label><label class="full">السبب<input id="oReason"></label></div><div class="modal-actions"><button type="button" class="secondary" data-close="overtimeModal">إلغاء</button><button class="primary">حفظ</button></div></form></div></div>
 
+
+<div class="modal-bg" id="leaveModal"><div class="modal">
+  <div class="modal-head"><h2 id="leaveModalTitle">إضافة إجازة</h2><button class="close" data-close="leaveModal">×</button></div>
+  <form id="leaveForm">
+    <input type="hidden" id="lvId">
+    <div class="form-grid">
+      <label>الموظفة<select id="lvEmployee"></select></label>
+      <label>نوع الإجازة<select id="lvType"><option>إجازة عادية</option><option>إجازة مرضية</option><option>إجازة بدون أجر</option><option>إجازة أخرى</option></select></label>
+      <label>من تاريخ<input id="lvStart" type="date" required></label>
+      <label>إلى تاريخ<input id="lvEnd" type="date" required></label>
+      <label class="full">السبب / الملاحظة<input id="lvReason" placeholder="مثال: إجازة معتمدة من الإدارة"></label>
+    </div>
+    <div class="info-box leave-no-deduction">✓ هذه الإجازة لا تُخصم من المرتب ولا تُعتبر تأخيراً.</div>
+    <div class="modal-actions">
+      <button type="button" class="secondary" data-close="leaveModal">إلغاء</button>
+      <button class="primary">حفظ الإجازة</button>
+    </div>
+  </form>
+</div></div>
+
 <div id="printArea" class="print-area"></div>
 <div class="toast" id="toast"></div>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -225,6 +269,6 @@
   const firebaseApp = firebase.initializeApp(firebaseConfig);
   window.nosaDB = firebase.database(firebaseApp);
 </script>
-<script src="script.js"></script>
+<script src="script.js?v=20260830-all-employees-payroll-7"></script>
 </body>
 </html>
